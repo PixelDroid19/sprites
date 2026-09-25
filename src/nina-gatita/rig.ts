@@ -1,7 +1,14 @@
 // Anclajes de cada figura: dónde están el cuello, la cadera, las piernas,
 // los ojos y las colas. La animación nunca mueve píxeles sueltos: mueve
 // regiones definidas desde estos anclajes, así las partes siguen unidas.
-import { cleanUnderEyes, removeKitten, tailFromBack } from "./character";
+import {
+  cleanUnderEyes,
+  dryEyes,
+  mirrorEar,
+  removeKitten,
+  smoothCrown,
+  tailFromBack,
+} from "./character";
 import { REFERENCE_SPRITES } from "./sprites.generated";
 import type { Facing } from "./types";
 
@@ -153,6 +160,11 @@ function autoAnchors(rows: readonly string[], tailBox: Box) {
   };
 }
 
+// Orejas que el gatito tapaba en la hoja: se reconstruyen en espejo.
+const MIRROR_EAR: Partial<Record<SpriteId, Box>> = {
+  arriba: box(5, 10, 10, 15),
+};
+
 // Vistas de espalda: la cola sale del centro de la espalda, no de un lado.
 const TAIL_FROM_BACK: SpriteId[] = ["arriba", "arribaDerecha"];
 
@@ -166,7 +178,12 @@ interface GirlSprite {
 function buildGirl(id: SpriteId): GirlSprite {
   const manual = MANUAL[id];
   const noKitten = removeKitten(REFERENCE_SPRITES[id].rows);
-  let rows = cleanUnderEyes(noKitten.rows, manual.eyes);
+  const ear = MIRROR_EAR[id];
+  const crown = ear ? mirrorEar(noKitten.rows, ear) : noKitten.rows;
+  let rows = dryEyes(
+    cleanUnderEyes(smoothCrown(crown), manual.eyes),
+    manual.eyes,
+  );
   const auto = autoAnchors(rows, manual.tail);
   let tail = manual.tail;
   let tailLayer: string[] | undefined;

@@ -6,7 +6,9 @@
 //      un personaje aparte) y el pelo que tapaba se rehace en cúpula.
 //   2. cleanUnderEyes: los grises, marrones y salmones mezclados bajo los
 //      ojos se leían como un golpe; pasan a piel con un rubor simétrico.
-//   3. tailFromBack: en las vistas de espalda la cola salía por un lado del
+//   3. smoothCrown y dryEyes: pelos sueltos de 1-2 px en la coronilla y
+//      grises al pie del ojo (parecían lágrimas).
+//   4. tailFromBack: en las vistas de espalda la cola salía por un lado del
 //      cuerpo; se recoloca para que nazca del centro de la espalda.
 // Las rejillas conservan su tamaño: los anclajes medidos siguen valiendo.
 import type { EyeAnchor, TailAnchor } from "./rig";
@@ -42,7 +44,7 @@ export function closeOutline(g: Grid) {
 // Contorno colgando tras borrar algo: píxeles oscuros sin ningún vecino
 // (en 8 direcciones) que sea relleno. Se repite hasta que no quede ninguno.
 function pruneDanglingOutline(g: Grid, limitY: number) {
-  for (let changed = true; changed; ) {
+  for (let changed = true; changed;) {
     changed = false;
     g.forEach((row, y) =>
       row.forEach((ch, x) => {
@@ -66,13 +68,18 @@ function pruneDanglingOutline(g: Grid, limitY: number) {
 // las columnas que ocupaba, se quita todo píxel con 1 o ningún vecino
 // opaco en cruz, hasta que no quede ninguno.
 function trimSpikes(g: Grid, a: number, b: number, limitY: number) {
-  for (let changed = true; changed; ) {
+  for (let changed = true; changed;) {
     changed = false;
     for (let y = 0; y < limitY; y++)
       for (let x = a; x <= b; x++) {
         if (at(g, x, y) === EMPTY) continue;
-        const n = N4.filter(([dx, dy]) => at(g, x + dx, y + dy) !== EMPTY).length;
-        if (n <= 1 || (at(g, x - 1, y) === EMPTY && at(g, x + 1, y) === EMPTY)) {
+        const n = N4.filter(
+          ([dx, dy]) => at(g, x + dx, y + dy) !== EMPTY,
+        ).length;
+        if (
+          n <= 1 ||
+          (at(g, x - 1, y) === EMPTY && at(g, x + 1, y) === EMPTY)
+        ) {
           g[y][x] = EMPTY;
           changed = true;
         }
@@ -107,7 +114,8 @@ function dropIslands(g: Grid) {
     }),
   );
   islands.sort((p, q) => q.length - p.length);
-  for (const cells of islands.slice(1)) for (const [x, y] of cells) g[y][x] = EMPTY;
+  for (const cells of islands.slice(1))
+    for (const [x, y] of cells) g[y][x] = EMPTY;
 }
 
 export interface KittenRemoval {
@@ -122,7 +130,10 @@ export interface KittenRemoval {
 // (por encima de `limitY`, para no tocar los pendientes) se borra desde
 // arriba hasta el último naranja y su contorno inferior. Luego se rehace la
 // coronilla con una cúpula de pelo: contorno, sombra, base y un brillo.
-export function removeKitten(rows: readonly string[], limitY = 20): KittenRemoval {
+export function removeKitten(
+  rows: readonly string[],
+  limitY = 20,
+): KittenRemoval {
   const g: Grid = rows.map((r) => [...r]);
   const w = g[0].length;
   const bottom = new Array<number>(w).fill(-1);
@@ -160,13 +171,16 @@ export function removeKitten(rows: readonly string[], limitY = 20): KittenRemova
     return t < 0 ? g.length : t;
   };
   const mid = Math.round((a + b) / 2);
-  const earTop = Math.min(...Array.from({ length: b - a + 7 }, (_, i) => topOf(a - 3 + i)));
+  const earTop = Math.min(
+    ...Array.from({ length: b - a + 7 }, (_, i) => topOf(a - 3 + i)),
+  );
   const apex = earTop + 2;
   const half = Math.max(1, (b - a) / 2);
   for (let x = a; x <= b; x++) {
     const t = (x - mid) / half;
     const want = Math.round(apex + 2 * t * t);
-    for (let y = 0; y < want; y++) if (g[y][x] !== "p" && g[y][x] !== "P") g[y][x] = EMPTY;
+    for (let y = 0; y < want; y++)
+      if (g[y][x] !== "p" && g[y][x] !== "P") g[y][x] = EMPTY;
     for (let y = want; y < limitY; y++) {
       if (g[y][x] !== EMPTY && y > want + 1) break;
       const depth = y - want;
@@ -181,7 +195,10 @@ export function removeKitten(rows: readonly string[], limitY = 20): KittenRemova
     for (let x = a; x <= b; x++) {
       const ch = g[y][x];
       if ("swReGSc".includes(ch)) g[y][x] = "B";
-      else if ((ch === "k" || ch === "K") && N4.every(([dx, dy]) => at(g, x + dx, y + dy) !== EMPTY))
+      else if (
+        (ch === "k" || ch === "K") &&
+        N4.every(([dx, dy]) => at(g, x + dx, y + dy) !== EMPTY)
+      )
         g[y][x] = "h";
     }
   // Antenas: columnas de 1 px de ancho y 2+ de alto que asoman sobre la
@@ -190,7 +207,9 @@ export function removeKitten(rows: readonly string[], limitY = 20): KittenRemova
     const top = topOf(x);
     let y = top;
     const lonely = (yy: number) =>
-      at(g, x, yy) !== EMPTY && at(g, x - 1, yy) === EMPTY && at(g, x + 1, yy) === EMPTY;
+      at(g, x, yy) !== EMPTY &&
+      at(g, x - 1, yy) === EMPTY &&
+      at(g, x + 1, yy) === EMPTY;
     while (y < limitY && lonely(y)) y++;
     if (y - top >= 2) for (let yy = top; yy < y; yy++) g[yy][x] = EMPTY;
   }
@@ -201,14 +220,21 @@ export function removeKitten(rows: readonly string[], limitY = 20): KittenRemova
   closeOutline(g);
   const seatX = mid;
   const seatY = g.findIndex((row) => row[seatX] !== EMPTY);
-  return { rows: g.map((r) => r.join("")), seat: { x: seatX, y: seatY }, span: [a, b] };
+  return {
+    rows: g.map((r) => r.join("")),
+    seat: { x: seatX, y: seatY },
+    span: [a, b],
+  };
 }
 
 // Bajo cada ojo, lo que no es piel ni contorno se mezclaba en un moratón.
 // Se limpia la franja de 2 filas bajo la caja del ojo (solo píxeles
 // rodeados de piel, para no comerse el pelo del borde de la cara) y se
 // pone un rubor de 2 px, igual en los dos ojos.
-export function cleanUnderEyes(rows: readonly string[], eyes: readonly EyeAnchor[]): string[] {
+export function cleanUnderEyes(
+  rows: readonly string[],
+  eyes: readonly EyeAnchor[],
+): string[] {
   const g: Grid = rows.map((r) => [...r]);
   const skinish = (ch: string) => SKIN.has(ch) || ch === "G";
   for (const e of eyes) {
@@ -220,7 +246,8 @@ export function cleanUnderEyes(rows: readonly string[], eyes: readonly EyeAnchor
         if (N4.some(([dx, dy]) => at(g, x + dx, y + dy) === EMPTY)) continue;
         let skin = 0;
         for (let dy = -1; dy <= 1; dy++)
-          for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && skinish(at(g, x + dx, y + dy))) skin++;
+          for (let dx = -1; dx <= 1; dx++)
+            if ((dx || dy) && skinish(at(g, x + dx, y + dy))) skin++;
         if (skin >= 4) g[y][x] = "s";
       }
     // Rubor: 2 px bajo el lado exterior del ojo, si allí hay piel.
@@ -232,8 +259,12 @@ export function cleanUnderEyes(rows: readonly string[], eyes: readonly EyeAnchor
   g.forEach((row, y) =>
     row.forEach((ch, x) => {
       if (ch !== "G") return;
-      const inEye = eyes.some((e) => x >= e.x0 && x <= e.x1 && y >= e.y0 && y <= e.y1);
-      const skinNeighbours = N4.filter(([dx, dy]) => SKIN.has(at(g, x + dx, y + dy))).length;
+      const inEye = eyes.some(
+        (e) => x >= e.x0 && x <= e.x1 && y >= e.y0 && y <= e.y1,
+      );
+      const skinNeighbours = N4.filter(([dx, dy]) =>
+        SKIN.has(at(g, x + dx, y + dy)),
+      ).length;
       if (!inEye && skinNeighbours >= 2) row[x] = "s";
     }),
   );
@@ -279,7 +310,8 @@ export function tailFromBack(
       : Math.max(...piece.map(([x]) => x));
   const dx = centerX - rootX;
   const layer: Grid = g.map((row) => row.map(() => EMPTY));
-  for (const [x, y, ch] of piece) if (x + dx >= 0 && x + dx < w) layer[y][x + dx] = ch;
+  for (const [x, y, ch] of piece)
+    if (x + dx >= 0 && x + dx < w) layer[y][x + dx] = ch;
   closeOutline(layer);
   const xs = piece.map(([x]) => x + dx);
   const ys = piece.map(([, y]) => y);
@@ -294,4 +326,89 @@ export function tailFromBack(
       root: tail.root,
     },
   };
+}
+
+// Coronilla sin picos: un grupo de 1-3 columnas que asoma 2+ px por encima
+// de sus vecinas es un pelo suelto o un resto del gatito. Se baja quitando
+// su píxel de arriba, hasta que no quede ninguno. Las orejas no se tocan:
+// tienen rosa en sus 4 primeras filas.
+export function smoothCrown(rows: readonly string[], limitY = 20): string[] {
+  const g: Grid = rows.map((r) => [...r]);
+  const w = g[0].length;
+  const topOf = (x: number) => {
+    if (x < 0 || x >= w) return g.length;
+    const t = g.findIndex((row) => row[x] !== EMPTY);
+    return t < 0 ? g.length : t;
+  };
+  const isEar = (x: number) => {
+    const t = topOf(x);
+    for (let y = t; y < t + 4 && y < g.length; y++)
+      if (g[y][x] === "p" || g[y][x] === "P") return true;
+    return false;
+  };
+  const DARK_TOP = new Set(["k", "K", "d", "D"]);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (let x = 0; x < w; x++)
+      for (let wd = 1; wd <= 3; wd++) {
+        const cols = Array.from({ length: wd }, (_, i) => x + i);
+        if (cols.some((c) => c >= w || isEar(c))) continue;
+        const tops = cols.map(topOf);
+        const high = Math.min(...tops);
+        const low = Math.max(...tops);
+        if (high >= limitY) continue;
+        const around = Math.min(topOf(x - 1), topOf(x + wd));
+        // Pico de 1-3 columnas que asoma 2+ px sobre sus vecinas, o palito
+        // oscuro de 1 px de ancho que asoma 1 px y mide 2 de alto.
+        const stick =
+          wd === 1 &&
+          high <= around - 1 &&
+          DARK_TOP.has(g[high][x]) &&
+          DARK_TOP.has(g[high + 1]?.[x] ?? EMPTY) &&
+          g[high][x - 1] === EMPTY &&
+          g[high][x + 1] === EMPTY;
+        if (low <= around - 2 || stick) {
+          for (const c of cols) if (topOf(c) === high) g[high][c] = EMPTY;
+          changed = true;
+          break;
+        }
+      }
+  }
+  closeOutline(g);
+  return g.map((r) => r.join(""));
+}
+
+// El gris que queda en la última fila de la caja del ojo se lee como una
+// lágrima: pasa a piel.
+export function dryEyes(
+  rows: readonly string[],
+  eyes: readonly EyeAnchor[],
+): string[] {
+  const g: Grid = rows.map((r) => [...r]);
+  for (const e of eyes)
+    for (let x = e.x0; x <= e.x1; x++) if (g[e.y1][x] === "G") g[e.y1][x] = "s";
+  return g.map((r) => r.join(""));
+}
+
+// Vista simétrica a la que le falta una oreja (en la hoja la tapaba el
+// gatito): se copia en espejo la otra, respecto al centro de la cabeza
+// medido 2 filas por debajo de la oreja.
+export function mirrorEar(
+  rows: readonly string[],
+  ear: { x0: number; y0: number; x1: number; y1: number },
+): string[] {
+  const g: Grid = rows.map((r) => [...r]);
+  const probe = g[ear.y1 + 2];
+  const left = probe.findIndex((ch) => ch !== EMPTY);
+  const right =
+    probe.length - 1 - [...probe].reverse().findIndex((ch) => ch !== EMPTY);
+  const span = left + right;
+  for (let y = ear.y0; y <= ear.y1; y++)
+    for (let x = ear.x0; x <= ear.x1; x++) {
+      const ch = rows[y][x];
+      const mx = span - x;
+      if (ch !== EMPTY && mx >= 0 && mx < g[0].length) g[y][mx] = ch;
+    }
+  closeOutline(g);
+  return g.map((r) => r.join(""));
 }

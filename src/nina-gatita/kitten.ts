@@ -1,125 +1,107 @@
-// El gatito como personaje propio. Sus figuras salen del panel "Gatito
-// (solo)" de la hoja, limpias: la extracción mezcla marrones del pelo de la
-// niña con el pelaje (antialiasado del fondo) y se pasan a la rampa
-// naranja; la boca se redibuja como una nariz rosa. Usa el mismo sistema
-// de anclajes y poses que la niña: cabeza, patas, ojos y cola.
+// El gatito como personaje propio, sobre los sprites dibujados a mano de
+// kitten-art.ts. Usa el mismo sistema de anclajes y poses que la niña:
+// cabeza (filas 0-13), patas (3 filas del suelo), ojos y cola.
+import { KITTEN_BACK_TAIL, KITTEN_LIE, KITTEN_SIT } from "./kitten-art";
 import type { Box, EyeAnchor, Rig, TailAnchor } from "./rig";
 import { inBox } from "./rig";
-import { KITTEN_REFERENCE } from "./sprites.generated";
 import type { Facing } from "./types";
 
-export type KittenView = keyof typeof KITTEN_REFERENCE;
+export type KittenView = keyof typeof KITTEN_SIT;
+export type KittenPose = "sentado" | "tumbado";
 
-// Marrones y rosas del pelo de la niña que aparecen dentro del gatito.
-const RECOLOR: Record<string, string> = {
-  B: "o",
-  H: "o",
-  h: "o",
-  D: "o",
-  d: "k",
-  L: "O",
-  e: "O",
-  i: "k",
-  K: "k",
-  S: "p",
-};
+// Primera fila del cuerpo: todas las vistas comparten la misma cabeza.
+const NECK_Y = 14;
 
-// Retoques de diseño [x, y, color] tras el recolor.
-const TOUCHES: Partial<Record<KittenView, [number, number, string][]>> = {
-  // Nariz rosa en lugar de la mancha marrón, y ojos 2x2 con brillo.
-  frente: [
-    [8, 12, "R"],
-    [9, 12, "R"],
-    [5, 9, "w"],
-    [11, 9, "w"],
-  ],
-};
-
-const box = (x0: number, y0: number, x1: number, y1: number): Box => ({ x0, y0, x1, y1 });
-const eye = (x0: number, y0: number, x1: number, y1: number, outer: EyeAnchor["outer"]): EyeAnchor => ({
-  ...box(x0, y0, x1, y1),
+const box = (x0: number, y0: number, x1: number, y1: number): Box => ({
+  x0,
+  y0,
+  x1,
+  y1,
+});
+// Los ojos se cierran con pelaje (no piel) y su sombra.
+const eye = (x0: number, y0: number, outer: EyeAnchor["outer"]): EyeAnchor => ({
+  ...box(x0, y0, x0 + 1, y0 + 3),
   outer,
   fill: "y",
   shade: "O",
 });
-const tail = (x0: number, y0: number, x1: number, y1: number, root: TailAnchor["root"]): TailAnchor => ({
-  ...box(x0, y0, x1, y1),
-  root,
-});
+const tail = (
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  root: TailAnchor["root"],
+): TailAnchor => ({ ...box(x0, y0, x1, y1), root });
+// Vista sin cola visible: caja vacía, el vaivén no mueve nada.
+const NO_TAIL = tail(0, 0, 0, 0, "left");
 
-// neckY: primera fila del cuerpo. hipY: primera fila de las patas.
-const ANCHORS: Record<KittenView, { neckY: number; hipY: number; eyes: EyeAnchor[]; tail: TailAnchor }> = {
-  frente: {
-    neckY: 13,
-    hipY: 17,
-    eyes: [eye(5, 8, 6, 11, "left"), eye(11, 8, 12, 11, "right")],
-    tail: tail(14, 13, 17, 17, "left"),
-  },
+// Ojos (2x2, la caja empieza una fila por encima) y cola de cada vista.
+const ANCHORS: Record<KittenView, { eyes: EyeAnchor[]; tail: TailAnchor }> = {
+  frente: { eyes: [eye(6, 7, "left"), eye(16, 7, "right")], tail: NO_TAIL },
+  lado: { eyes: [eye(5, 7, "right")], tail: tail(20, 1, 25, 11, "bottom") },
   tresCuartos: {
-    neckY: 12,
-    hipY: 14,
-    eyes: [eye(4, 6, 4, 9, "left")],
-    tail: tail(12, 10, 15, 15, "left"),
+    eyes: [eye(5, 7, "left"), eye(12, 7, "right")],
+    tail: tail(22, 1, 27, 11, "bottom"),
   },
-  lado: {
-    neckY: 12,
-    hipY: 15,
-    eyes: [eye(3, 6, 3, 9, "right")],
-    tail: tail(12, 7, 17, 11, "bottom"),
-  },
-  espalda: {
-    neckY: 14,
-    hipY: 19,
-    eyes: [],
-    tail: tail(0, 15, 6, 20, "right"),
-  },
-  espaldaTresCuartos: {
-    neckY: 11,
-    hipY: 17,
-    eyes: [],
-    tail: tail(13, 11, 18, 16, "left"),
-  },
+  espalda: { eyes: [], tail: tail(9, 15, 14, 19, "bottom") },
+  espaldaTresCuartos: { eyes: [], tail: tail(22, 1, 27, 11, "bottom") },
 };
 
-function clean(view: KittenView): string[] {
-  const g = KITTEN_REFERENCE[view].map((row) => [...row].map((ch) => RECOLOR[ch] ?? ch));
-  for (const [x, y, ch] of TOUCHES[view] ?? []) g[y][x] = ch;
-  return g.map((r) => r.join(""));
-}
-
-function buildRig(view: KittenView, rows: string[]): Rig {
+function buildRig(
+  view: KittenView,
+  rows: readonly string[],
+  lying: boolean,
+): Rig {
   const a = ANCHORS[view];
-  // Patas: ancho medido en las 2 filas del suelo, fuera de la cola.
+  const h = rows.length;
+  // En el tumbado la cola de la espalda queda bajo el cuerpo: no se ve.
+  const hideTail = lying && view === "espalda";
+  const tailAnchor = hideTail ? NO_TAIL : a.tail;
+  // Patas: las 3 filas del suelo (en el tumbado, las que quedan bajo el
+  // cuello).
+  const hipY = Math.max(NECK_Y + 1, h - 3);
   let minX = Infinity;
   let maxX = -Infinity;
-  for (let y = rows.length - 2; y < rows.length; y++)
+  for (let y = hipY; y < h; y++)
     [...rows[y]].forEach((ch, x) => {
-      if (ch === "." || inBox(a.tail, x, y)) return;
+      if (ch === "." || inBox(tailAnchor, x, y)) return;
       minX = Math.min(minX, x);
       maxX = Math.max(maxX, x);
     });
   return {
     width: rows[0].length,
-    height: rows.length,
-    neckY: a.neckY,
-    hipY: a.hipY,
-    legs: box(minX, a.hipY, maxX, rows.length - 1),
+    height: h,
+    neckY: NECK_Y,
+    hipY,
+    legs: box(minX, hipY, maxX, h - 1),
     legSplitX: Math.round((minX + maxX + 1) / 2),
     eyes: a.eyes,
-    tail: a.tail,
+    tail: tailAnchor,
+    tailLayer: view === "espalda" && !lying ? KITTEN_BACK_TAIL : undefined,
     seat: { x: 0, y: 0 },
   };
 }
 
-export const KITTEN = Object.fromEntries(
-  (Object.keys(KITTEN_REFERENCE) as KittenView[]).map((view) => {
-    const rows = clean(view);
-    return [view, { rows, rig: buildRig(view, rows) }];
-  }),
-) as Record<KittenView, { rows: string[]; rig: Rig }>;
+type Sprite = { rows: readonly string[]; rig: Rig };
 
-// Las figuras del panel miran a la izquierda; la derecha es el espejo.
-export const KITTEN_DIRECTIONS: Record<Facing, { view: KittenView; flip: boolean }> = {
+const build = (source: Record<KittenView, readonly string[]>, lying: boolean) =>
+  Object.fromEntries(
+    (Object.keys(source) as KittenView[]).map((view) => [
+      view,
+      { rows: source[view], rig: buildRig(view, source[view], lying) },
+    ]),
+  ) as Record<KittenView, Sprite>;
+
+export const KITTEN: Record<KittenPose, Record<KittenView, Sprite>> = {
+  sentado: build(KITTEN_SIT, false),
+  tumbado: build(KITTEN_LIE, true),
+};
+
+// Todas las vistas miran a la izquierda; la derecha es el espejo.
+export const KITTEN_DIRECTIONS: Record<
+  Facing,
+  { view: KittenView; flip: boolean }
+> = {
   abajo: { view: "frente", flip: false },
   "abajo-izquierda": { view: "tresCuartos", flip: false },
   izquierda: { view: "lado", flip: false },

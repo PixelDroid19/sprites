@@ -85,16 +85,6 @@ const HEART_BUBBLE = {
   ] as [number, number, PaletteKey][],
 } as const;
 
-// Poses del panel "Gatito (solo)": el gatito como personaje independiente.
-// También están sobre el beige opaco del panel.
-const KITTEN_CELLS = {
-  frente: [1212, 535, 1289, 624],
-  tresCuartos: [1326, 536, 1399, 622],
-  lado: [1416, 536, 1496, 621],
-  espalda: [1242, 644, 1333, 749],
-  espaldaTresCuartos: [1377, 643, 1465, 741],
-} as const;
-
 // Correcciones manuales [x, y, color] sobre la rejilla ya extraída, cada
 // una revisada contra su celda en la hoja. Solo donde la referencia dibuja
 // un detalle más pequeño que una celda y la mediana lo pierde o lo mezcla:
@@ -240,6 +230,11 @@ const FIXES: Partial<Record<CellId, [number, number, PaletteKey | "."][]>> = {
 };
 
 const PAD = 6;
+// La niña se extrae sin el marrón-naranja profundo del gatito ("q"): está
+// muy cerca del brillo del pelo y le cambiaría mechones.
+const GIRL_KEYS: ReadonlySet<string> = new Set(
+  PALETTE_KEYS.filter((k) => k !== "q"),
+);
 const ALPHA_MIN = 140;
 const KEY = [0, 255, 0];
 const GAP_PENALTY: Record<number, number> = { 3: 150, 4: 0, 5: 0, 6: 150 };
@@ -277,10 +272,16 @@ const PALETTE_LAB = PALETTE_KEYS.map((key) => {
   };
 });
 
-function nearestKey(lab: Lab): { key: PaletteKey; delta: number } {
+// `allowed` limita la búsqueda a un subconjunto de la paleta (el gatito no
+// debe poder caer en los marrones del pelo, ni la niña en su naranja).
+function nearestKey(
+  lab: Lab,
+  allowed?: ReadonlySet<string>,
+): { key: PaletteKey; delta: number } {
   let best = PALETTE_LAB[0];
   let bestD = Infinity;
   for (const entry of PALETTE_LAB) {
+    if (allowed && !allowed.has(entry.key)) continue;
     const d = dist(lab, entry.lab);
     if (d < bestD) {
       bestD = d;
@@ -298,30 +299,27 @@ interface Crop {
   lab: Lab[];
 }
 
-// `background`: color de un panel opaco que debe contar como transparente.
+// `background`: colores opacos (panel, sombra del suelo) que deben contar
+// como transparentes.
 function cropOf(
   data: Uint8ClampedArray,
   imgW: number,
   box: readonly number[],
-  background?: readonly number[],
+  background: readonly (readonly number[])[] = [],
 ): Crop {
   const [x0, y0, x1, y1] = box;
   const w = x1 - x0 + 1 + PAD * 2;
   const h = y1 - y0 + 1 + PAD * 2;
   const rgba = new Uint8ClampedArray(w * h * 4);
   const lab: Lab[] = [];
-  const bgLab =
-    background && toLab(background[0], background[1], background[2]);
+  const bgLab = background.map((c) => toLab(c[0], c[1], c[2]));
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
       const src = ((y0 - PAD + y) * imgW + (x0 - PAD + x)) * 4;
       const dst = (y * w + x) * 4;
       for (let c = 0; c < 4; c++) rgba[dst + c] = data[src + c];
-      if (
-        bgLab &&
-        dist(toLab(data[src], data[src + 1], data[src + 2]), bgLab) < 8
-      )
-        rgba[dst + 3] = 0;
+      const here = toLab(data[src], data[src + 1], data[src + 2]);
+      if (bgLab.some((bg) => dist(here, bg) < 8)) rgba[dst + 3] = 0;
       const a = rgba[dst + 3] / 255;
       lab.push(
         toLab(
@@ -399,7 +397,11 @@ function cellInterior(
 
 // Color de la celda: el píxel real más cercano a la mediana (en Lab) del
 // interior, cuantizado a la paleta. Null si ese píxel es fondo.
-function sampleCell(crop: Crop, idx: number[]): PaletteKey | null {
+function sampleCell(
+  crop: Crop,
+  idx: number[],
+  allowed?: ReadonlySet<string>,
+): PaletteKey | null {
   const median = [0, 1, 2].map((c) => {
     const v = idx.map((i) => crop.lab[i][c]).sort((p, q) => p - q);
     return v[Math.floor(v.length / 2)];
@@ -415,7 +417,7 @@ function sampleCell(crop: Crop, idx: number[]): PaletteKey | null {
   }
   if (crop.rgba[pick * 4 + 3] < ALPHA_MIN) return null;
   const rgb = crop.rgba.slice(pick * 4, pick * 4 + 3);
-  return nearestKey(toLab(rgb[0], rgb[1], rgb[2])).key;
+  return nearestKey(toLab(rgb[0], rgb[1], rgb[2]), allowed).key;
 }
 
 type Grid = string[][];
@@ -553,7 +555,8 @@ function extract(
   imgW: number,
   box: readonly number[],
   fixes: [number, number, PaletteKey | "."][],
-  background?: readonly number[],
+  background: readonly (readonly number[])[] = [],
+  allowed: ReadonlySet<string> = GIRL_KEYS,
 ): Extracted {
   const crop = cropOf(data, imgW, box, background);
   const cx = gridCuts(edgeProfile(crop, "x"), crop.w);
@@ -566,6 +569,7 @@ function extract(
         sampleCell(
           crop,
           cellInterior(crop, cx[i], cx[i + 1], cy[j], cy[j + 1]),
+          allowed,
         ) ?? ".",
       );
     grid.push(row);
@@ -646,16 +650,10 @@ async function main() {
     image.width,
     HEART_BUBBLE.box,
     HEART_BUBBLE.fixes,
-    HEART_BUBBLE.background,
+    [HEART_BUBBLE.background],
   );
   debug.heartBubble = bubble.cuts;
   report("heartBubble", bubble);
-  const kittens = Object.entries(KITTEN_CELLS).map(([id, box]) => {
-    const e = extract(data, image.width, box, [], HEART_BUBBLE.background);
-    debug[`gatito-${id}`] = e.cuts;
-    report(`gatito ${id}`, e);
-    return [id, e.rows] as const;
-  });
 
   const body = Object.entries(out)
     .map(([id, sprite]) => {
@@ -685,11 +683,6 @@ ${body}
 export const HEART_BUBBLE: readonly string[] = [
 ${bubble.rows.map((r) => `  "${r}",`).join("\n")}
 ];
-
-// Poses del panel "Gatito (solo)", tal cual salen de la hoja.
-export const KITTEN_REFERENCE = {
-${kittens.map(([id, rows]) => `  ${id}: [\n${rows.map((r) => `    "${r}",`).join("\n")}\n  ],`).join("\n")}
-} as const satisfies Record<string, readonly string[]>;
 `;
   // Se formatea con Prettier para que regenerar no deje diferencias de estilo.
   writeFileSync(OUT, await format(source, { parser: "typescript" }));

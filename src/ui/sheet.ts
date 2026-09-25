@@ -1,6 +1,8 @@
 // Hoja: las 9 figuras junto a su recorte original, y la paleta por grupos.
 import type { Ctx } from "../engine/surface";
-import { sample } from "../nina-gatita/animation";
+import { sample, sampleKitten } from "../nina-gatita/animation";
+import { KITTEN_DIRECTIONS } from "../nina-gatita/kitten";
+import type { Facing } from "../nina-gatita/types";
 import {
   PALETTE,
   PALETTE_KEYS,
@@ -118,10 +120,96 @@ function paletteGroups() {
   );
 }
 
+// Orden de la hoja del gatito: de abajo en sentido horario.
+const KITTEN_ORDER: Facing[] = [
+  "abajo",
+  "abajo-izquierda",
+  "izquierda",
+  "arriba-izquierda",
+  "arriba",
+  "arriba-derecha",
+  "derecha",
+  "abajo-derecha",
+];
+const KITTEN_CELL = 32;
+const KITTEN_SIT_Y = 27;
+const KITTEN_LIE_Y = 50;
+
+// Recorte de una franja de la hoja del gatito escalada a `width` px CSS.
+function kittenReference(box: readonly number[], width: number) {
+  const [x0, y0, x1, y1] = box;
+  const scale = width / (x1 - x0);
+  return h("div", {
+    className: "ng-ref",
+    role: "img",
+    "aria-label": "Hoja de referencia del gatito",
+    style: `width:${width}px;height:${Math.round((y1 - y0) * scale)}px;background-image:url("${import.meta.env.BASE_URL}referencia/gatito-referencia.webp");background-size:${1536 * scale}px ${1024 * scale}px;background-position:${-x0 * scale}px ${-y0 * scale}px`,
+  });
+}
+
+// El gatito en sus 8 direcciones, sentado (arriba) y tumbado como va en la
+// cabeza (abajo), todos en un solo lienzo con su animación de reposo.
+function kittenPanel(reduced: boolean) {
+  const width = KITTEN_CELL * KITTEN_ORDER.length;
+  const screen = createPixelScreen({
+    width,
+    height: KITTEN_LIE_Y + 2,
+    label: "El gatito en 8 direcciones, sentado y tumbado",
+    render: (ctx: Ctx, ms: number) => {
+      KITTEN_ORDER.forEach((facing, i) => {
+        const d = KITTEN_DIRECTIONS[facing];
+        const x = i * KITTEN_CELL + KITTEN_CELL / 2;
+        const pose = sampleKitten("idle", ms, ms + i * 290, reduced).pose;
+        drawShadow(ctx, x, KITTEN_SIT_Y - 1, 7, 2);
+        drawCharacter(ctx, {
+          sprite: `gatito:${d.view}`,
+          flip: d.flip,
+          pose,
+          x,
+          y: KITTEN_SIT_Y,
+        });
+        drawCharacter(ctx, {
+          sprite: `gatito-cabeza:${d.view}`,
+          flip: d.flip,
+          pose,
+          x,
+          y: KITTEN_LIE_Y,
+        });
+      });
+    },
+  });
+  return {
+    screen,
+    el: h("div", { className: "ng-panel", style: "margin-top:12px" }, [
+      h("p", { className: "ng-panel-title" }, [
+        "Gatito: 8 direcciones, sentado y en la cabeza",
+      ]),
+      h(
+        "div",
+        {
+          style:
+            "display:flex;flex-direction:column;align-items:center;gap:6px",
+        },
+        [
+          kittenReference([17, 195, 1517, 345], width * 3),
+          kittenReference([17, 495, 1517, 615], width * 3),
+          h("div", { style: `width:${width * 3}px;max-width:100%` }, [
+            screen.el,
+          ]),
+        ],
+      ),
+      h("p", { className: "ng-note" }, [
+        "Arriba, la hoja de referencia del gatito. Abajo, el gatito del proyecto, dibujado a mano sobre la rejilla siguiendo esa hoja (la extracción automática rompía ojos, boca y bigotes). Las vistas hacia la derecha son el espejo de las de la izquierda.",
+      ]),
+    ]),
+  };
+}
+
 export function createSheet(): HTMLElement {
   const reduced = prefersReducedMotion();
   const cards = SPRITE_IDS.map((id) => spriteCard(id, reduced));
-  const screens: PixelScreen[] = cards.map((c) => c.screen);
+  const kitten = kittenPanel(reduced);
+  const screens: PixelScreen[] = [...cards.map((c) => c.screen), kitten.screen];
   let playing = true;
   const toggle = h("button", { type: "button", className: "ng-btn" }, [
     "Pausar animaciones",
@@ -144,7 +232,7 @@ export function createSheet(): HTMLElement {
         "Referencia frente a rejilla extraída",
       ]),
       h("p", { className: "ng-intro" }, [
-        "A la izquierda, el recorte de la hoja original; a la derecha, la misma figura pintada en JS píxel a píxel desde la rejilla extraída, con su animación de reposo.",
+        "A la izquierda, el recorte de la hoja original; a la derecha, la misma figura pintada en JS píxel a píxel desde la rejilla extraída y corregida (sin el gatito, que ahora es un personaje aparte), con su animación de reposo.",
       ]),
       h("div", { className: "ng-buttons", style: "margin-bottom:12px" }, [
         toggle,
@@ -154,6 +242,7 @@ export function createSheet(): HTMLElement {
         { className: "ng-sheet" },
         cards.map((c) => c.card),
       ),
+      kitten.el,
       h("div", { className: "ng-panel", style: "margin-top:12px" }, [
         h("p", { className: "ng-panel-title" }, [
           `Paleta (${PALETTE_KEYS.length} colores, por función)`,

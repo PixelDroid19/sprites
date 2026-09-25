@@ -20,7 +20,8 @@ function toLab(r: number, g: number, b: number): Lab {
   return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
 }
 
-const d2 = (a: Lab, b: Lab) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+const d2 = (a: Lab, b: Lab) =>
+  (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
 
 async function main() {
   const [file, boxesArg, kArg] = process.argv.slice(2);
@@ -42,7 +43,7 @@ async function main() {
   }
   // k-means++ determinista (semilla fija).
   let seed = 7;
-  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const centers: Lab[] = [px[Math.floor(rand() * px.length)].lab];
   while (centers.length < k) {
     const dist = px.map((p) => Math.min(...centers.map((ce) => d2(p.lab, ce))));
@@ -53,21 +54,38 @@ async function main() {
   }
   let groups: number[] = [];
   for (let it = 0; it < 40; it++) {
-    groups = px.map((p) => centers.reduce((best, ce, i) => (d2(p.lab, ce) < d2(p.lab, centers[best]) ? i : best), 0));
+    groups = px.map((p) =>
+      centers.reduce(
+        (best, ce, i) => (d2(p.lab, ce) < d2(p.lab, centers[best]) ? i : best),
+        0,
+      ),
+    );
     centers.forEach((_, i) => {
       const members = px.filter((_, j) => groups[j] === i);
       if (members.length)
-        centers[i] = [0, 1, 2].map((ch) => members.reduce((s, m) => s + m.lab[ch], 0) / members.length) as Lab;
+        centers[i] = [0, 1, 2].map(
+          (ch) => members.reduce((s, m) => s + m.lab[ch], 0) / members.length,
+        ) as Lab;
     });
   }
   const out = centers
     .map((ce, i) => {
       const members = px.filter((_, j) => groups[j] === i).map((m) => m.rgb);
-      const med = [0, 1, 2].map((ch) => members.map((m) => m[ch]).sort((a, b) => a - b)[Math.floor(members.length / 2)] ?? 0);
-      return { L: ce[0], hex: "#" + med.map((v) => v.toString(16).padStart(2, "0")).join(""), n: members.length };
+      const med = [0, 1, 2].map(
+        (ch) =>
+          members.map((m) => m[ch]).sort((a, b) => a - b)[
+            Math.floor(members.length / 2)
+          ] ?? 0,
+      );
+      return {
+        L: ce[0],
+        hex: "#" + med.map((v) => v.toString(16).padStart(2, "0")).join(""),
+        n: members.length,
+      };
     })
     .sort((a, b) => a.L - b.L);
-  for (const o of out) console.log(`${o.hex}  L=${o.L.toFixed(0).padStart(3)}  ${o.n} muestras`);
+  for (const o of out)
+    console.log(`${o.hex}  L=${o.L.toFixed(0).padStart(3)}  ${o.n} muestras`);
 }
 
 main().catch((e) => {

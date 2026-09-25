@@ -336,21 +336,39 @@ test("en las vistas de espalda la cola nace del centro de la espalda", () => {
     const r = RIGS[id];
     assert.ok(r.tailLayer, `${id}: sin capa de cola`);
     const root = r.tail.root === "left" ? r.tail.x0 : r.tail.x1;
-    assert.ok(Math.abs(root - r.legSplitX) <= 1, `${id}: raíz en ${root}, centro ${r.legSplitX}`);
+    assert.ok(
+      Math.abs(root - r.legSplitX) <= 1,
+      `${id}: raíz en ${root}, centro ${r.legSplitX}`,
+    );
   }
 });
 
-test("el gatito: poses válidas en todas sus vistas y 8 direcciones", () => {
+test("el gatito: poses válidas, contorno cerrado y 8 direcciones", () => {
   assert.equal(Object.keys(KITTEN_DIRECTIONS).length, 8);
-  for (const [view, k] of Object.entries(KITTEN)) {
-    for (const pose of POSES) {
-      const rows = composeRows(`gatito:${view}`, k.rows, k.rig, pose);
-      const name = `gatito ${view} ${JSON.stringify(pose)}`;
-      assertPaletteRows(name, rows);
-      assert.equal(islands(rows), 1, `${name}: se separa una parte`);
+  for (const [kind, views] of Object.entries(KITTEN))
+    for (const [view, k] of Object.entries(views)) {
+      assertPaletteRows(`${kind} ${view}`, k.rows);
+      assert.deepEqual(
+        openOutline(k.rows),
+        [],
+        `${kind} ${view}: sin contorno`,
+      );
+      for (const pose of POSES) {
+        const rows = composeRows(`gatito:${view}`, k.rows, k.rig, pose);
+        const name = `gatito ${kind} ${view} ${JSON.stringify(pose)}`;
+        assertPaletteRows(name, rows);
+        assert.equal(rows.length, k.rig.height, name);
+        // Bigotes, cola y patas siguen unidos al cuerpo en toda pose.
+        assert.equal(islands(rows), 1, `${name}: se separa una parte`);
+      }
+      assert.ok(k.rig.neckY < k.rig.hipY && k.rig.hipY < k.rig.height, view);
+      for (const e of k.rig.eyes)
+        assert.match(
+          k.rows[e.y0 + 1].slice(e.x0, e.x1 + 1),
+          /^k+$/,
+          `${view}: ojo fuera de su caja`,
+        );
     }
-    assert.ok(k.rig.neckY < k.rig.hipY && k.rig.hipY < k.rig.height, view);
-  }
 });
 
 test("el salto del gatito sale y llega a su sitio, con arco hacia arriba", () => {
@@ -361,4 +379,45 @@ test("el salto del gatito sale y llega a su sitio, con arco hacia arriba", () =>
   assert.ok(jumpArc(from, to, 0.5).y < (from.y + to.y) / 2);
   assert.equal(sampleKitten("jumpDown", 0, 0).phase, "impulso");
   assert.equal(sampleKitten("jumpDown", KITTEN_JUMP_MS - 10, 0).jump, 1);
+});
+
+test("la coronilla no tiene picos sueltos y 'Arriba' conserva sus dos orejas", () => {
+  for (const id of SPRITE_IDS) {
+    const rows = GIRL[id].rows;
+    const w = rows[0].length;
+    const top = (x: number) => {
+      const t = rows.findIndex((r) => r[x] !== ".");
+      return t < 0 ? rows.length : t;
+    };
+    // Ninguna columna de pelo oscuro asoma 2+ px sobre sus dos vecinas.
+    for (let x = 1; x < w - 1; x++) {
+      const t = top(x);
+      if (
+        t >= 20 ||
+        /[pP]/.test(
+          rows
+            .slice(t, t + 4)
+            .map((r) => r[x])
+            .join(""),
+        )
+      )
+        continue;
+      assert.ok(
+        !(t <= top(x - 1) - 2 && t <= top(x + 1) - 2),
+        `${id}: pico en la columna ${x}`,
+      );
+    }
+  }
+  const band = GIRL.arriba.rows.slice(10, 13);
+  const half = GIRL.arriba.rows[0].length / 2;
+  assert.match(
+    band.map((r) => r.slice(0, half)).join(""),
+    /[^.]/,
+    "oreja izquierda",
+  );
+  assert.match(
+    band.map((r) => r.slice(half)).join(""),
+    /[^.]/,
+    "oreja derecha",
+  );
 });

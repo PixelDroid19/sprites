@@ -68,6 +68,11 @@ export const PALETTE = {
   y: { hex: "#fec559", group: "gatito", role: "base" },
   Y: { hex: "#f9ce72", group: "gatito", role: "luz" },
   c: { hex: "#fbdb94", group: "gatito", role: "brillo" },
+  q: {
+    hex: "#c46042",
+    group: "gatito",
+    role: "sombra profunda / contorno interior",
+  },
 } as const satisfies Record<string, PaletteEntry>;
 
 export type PaletteKey = keyof typeof PALETTE;

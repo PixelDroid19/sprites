@@ -17,7 +17,7 @@ antialiasado dentro. Antes de nada:
 - Localiza las figuras: `npx tsx scripts/find-boxes.ts hoja.png [r,g,b del panel] [área mínima]`.
 - Desconfía de lo que la hoja dice de sí misma (tamaño "16x32", paleta de
   ejemplo, etiquetas de dirección). Mídelo.
-- Dilo al usuario: el resultado será *muy parecido* (ΔE medio 5-8 por celda),
+- Dilo al usuario: el resultado será _muy parecido_ (ΔE medio 5-8 por celda),
   no idéntico. Nunca pintes el personaje con `drawImage` de la referencia:
   la referencia solo se muestra al lado para comparar.
 
@@ -53,18 +53,38 @@ fichero generado; test de "una sola pieza" y "contorno cerrado".
 Revisa esta lista en **cada** figura y corrige con reglas en código
 (`src/nina-gatita/character.ts`), no retocando píxeles sueltos a mano:
 
-| Error típico | Cómo se ve | Corrección |
-| --- | --- | --- |
-| Etiqueta de dirección falsa | "Izquierda" mira a la derecha | Anota `faces` real; usa la figura correcta o el espejo de otra |
-| Falta una dirección | la de arriba-izquierda mira al frente | Espejo de la simétrica (`flip`) |
-| Mezcla gris/marrón bajo los ojos | parece un golpe | Franja bajo el ojo a piel + rubor simétrico (`cleanUnderEyes`) |
-| Parte anatómica en sitio distinto entre vistas | la cola sale de un lado en la vista de espalda | Recolocar en capa propia desde el anclaje correcto (`tailFromBack`) |
-| Personaje pegado a otro | el gatito pintado en la cabeza | Borrarlo, rehacer lo que tapaba (`removeKitten`: cúpula de pelo) y extraerlo aparte |
-| Antenas, pelos de 1 px, islas | restos al borrar | `trimSpikes`, `dropIslands`, `pruneDanglingOutline` |
+| Error típico                                   | Cómo se ve                                     | Corrección                                                                           |
+| ---------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Etiqueta de dirección falsa                    | "Izquierda" mira a la derecha                  | Anota `faces` real; usa la figura correcta o el espejo de otra                       |
+| Falta una dirección                            | la de arriba-izquierda mira al frente          | Espejo de la simétrica (`flip`)                                                      |
+| Mezcla gris/marrón bajo los ojos               | parece un golpe                                | Franja bajo el ojo a piel + rubor simétrico (`cleanUnderEyes`)                       |
+| Parte anatómica en sitio distinto entre vistas | la cola sale de un lado en la vista de espalda | Recolocar en capa propia desde el anclaje correcto (`tailFromBack`)                  |
+| Personaje pegado a otro                        | el gatito pintado en la cabeza                 | Borrarlo, rehacer lo que tapaba (`removeKitten`: cúpula de pelo) y extraerlo aparte  |
+| Antenas, pelos de 1-3 px, islas                | restos al borrar                               | `smoothCrown` (sin tocar orejas: tienen rosa), `dropIslands`, `pruneDanglingOutline` |
+| Gris al pie del ojo                            | parece una lágrima                             | `dryEyes`                                                                            |
+| Parte tapada por otro personaje                | falta una oreja al quitar el gatito            | Espejo de la simétrica (`mirrorEar`)                                                 |
 
 Regla: si una vista contradice a las demás, las demás mandan. Si la hoja
 tiene un panel aparte del personaje secundario (p. ej. "Gatito (solo)"),
 extrae de ahí; recolorea a su rampa los tonos ajenos que traiga mezclados.
+
+## 3b. Cuándo dibujar a mano en vez de extraer
+
+Si en la referencia los rasgos importantes (ojos, boca, bigotes, nariz)
+miden menos que una celda, la extracción los rompe: ojos en barra, boca de
+1 px, bigotes perdidos. No se arreglan con `FIXES` sueltos: se **redibuja
+el personaje a mano sobre la rejilla** siguiendo la referencia
+(`kitten-art.ts`):
+
+1. Diseña primero la vista de frente con la mitad izquierda y refléjala
+   (simetría perfecta); luego ajusta la luz (arriba-izquierda).
+2. Rasgos como grupos intencionados: ojos 2x2, rubor de 2 px, hocico crema
+   con boca en "ω", bigotes de 2 px pegados al contorno.
+3. Todas las vistas miran a un lado; las del otro son su espejo.
+4. Misma cabeza (mismas filas) en todas las poses del personaje; las poses
+   se derivan: "tumbado" = cabeza + las 3 filas de abajo del cuerpo.
+5. Compara siempre con la referencia ampliada al lado y con el conjunto a
+   escala real: lo que se ve bien a 12x puede no leerse a 1x.
 
 ## 4. Anclajes
 

@@ -64,13 +64,16 @@ function remember<T>(cache: Map<string, T>, key: string, make: () => T): T {
 const overrideCache = new WeakMap<EyeOverride, Map<string, Surface>>();
 
 // Todo lo que se puede pintar: las figuras de la niña por su id y las del
-// gatito como "gatito:<vista>". Los dos usan el mismo sistema de poses.
-export type ActorId = SpriteId | `gatito:${KittenView}`;
+// gatito como "gatito:<vista>" (sentado) o "gatito-cabeza:<vista>"
+// (tumbado sobre la cabeza). Todos usan el mismo sistema de poses.
+export type ActorId =
+  SpriteId | `gatito:${KittenView}` | `gatito-cabeza:${KittenView}`;
 
 export function actor(id: ActorId): { rows: readonly string[]; rig: Rig } {
-  return id.startsWith("gatito:")
-    ? KITTEN[id.slice(7) as KittenView]
-    : GIRL[id as SpriteId];
+  const [kind, view] = id.split(":") as [string, KittenView];
+  if (kind === "gatito") return KITTEN.sentado[view];
+  if (kind === "gatito-cabeza") return KITTEN.tumbado[view];
+  return GIRL[id as SpriteId];
 }
 
 export function getFrame(

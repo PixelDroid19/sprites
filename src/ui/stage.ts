@@ -234,7 +234,7 @@ export function createStage(): HTMLElement {
       kitten.y = seat.y;
       kitten.facing = sim.facing;
       const s = sampleKitten("head", inState, sim.clock, reduced);
-      return kittenDraw(sim.facing, s.pose, seat.x, seat.y);
+      return kittenDraw(sim.facing, s.pose, seat.x, seat.y, true);
     }
     // En el suelo: se queda a un lado de la niña, un poco detrás.
     const side = kitten.x < sim.x ? -1 : 1;
@@ -250,18 +250,33 @@ export function createStage(): HTMLElement {
       const step = Math.min(dist, (KITTEN_SPEED * dt) / 1000);
       kitten.x += (dx / dist) * step;
       kitten.y += (dy / dist) * step;
-      kitten.facing = facingFromVector(Math.round(dx), Math.round(dy)) ?? kitten.facing;
+      kitten.facing =
+        facingFromVector(Math.round(dx), Math.round(dy)) ?? kitten.facing;
     } else {
       // Quieto, mira hacia la niña.
       kitten.facing = sim.x > kitten.x ? "derecha" : "izquierda";
     }
-    const s = sampleKitten(kitten.state, sim.clock - kitten.start, sim.clock, reduced);
+    const s = sampleKitten(
+      kitten.state,
+      sim.clock - kitten.start,
+      sim.clock,
+      reduced,
+    );
     return kittenDraw(kitten.facing, s.pose, kitten.x, kitten.y);
   };
-  const kittenDraw = (facing: Facing, pose: Pose, kx: number, ky: number) => {
+  // En la cabeza va tumbado; en el suelo y saltando, sentado.
+  const kittenDraw = (
+    facing: Facing,
+    pose: Pose,
+    kx: number,
+    ky: number,
+    onHead = false,
+  ) => {
     const d = KITTEN_DIRECTIONS[facing];
     return {
-      sprite: `gatito:${d.view}` as const,
+      sprite: onHead
+        ? (`gatito-cabeza:${d.view}` as const)
+        : (`gatito:${d.view}` as const),
       flip: d.flip,
       pose,
       x: Math.round(kx),

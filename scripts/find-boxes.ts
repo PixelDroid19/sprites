@@ -13,12 +13,24 @@ async function main() {
   const c = createCanvas(img.width, img.height);
   const ctx = c.getContext("2d");
   ctx.drawImage(img, 0, 0);
-  const { data, width: w, height: h } = ctx.getImageData(0, 0, img.width, img.height);
+  const {
+    data,
+    width: w,
+    height: h,
+  } = ctx.getImageData(0, 0, img.width, img.height);
   const solid = new Uint8Array(w * h);
   for (let i = 0; i < w * h; i++) {
-    const [r, g, b, a] = [data[i * 4], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]];
+    const [r, g, b, a] = [
+      data[i * 4],
+      data[i * 4 + 1],
+      data[i * 4 + 2],
+      data[i * 4 + 3],
+    ];
     // Transparente siempre es fondo; con --bg, también el color del panel.
-    const isBg = a < 128 || (bg !== undefined && Math.abs(r - bg[0]) + Math.abs(g - bg[1]) + Math.abs(b - bg[2]) < 40);
+    const isBg =
+      a < 128 ||
+      (bg !== undefined &&
+        Math.abs(r - bg[0]) + Math.abs(g - bg[1]) + Math.abs(b - bg[2]) < 40);
     solid[i] = isBg ? 0 : 1;
   }
   const seen = new Uint8Array(w * h);
@@ -47,7 +59,8 @@ async function main() {
           }
         }
     }
-    if (area >= minArea) console.log(JSON.stringify([x0, y0, x1, y1]), `área ${area}`);
+    if (area >= minArea)
+      console.log(JSON.stringify([x0, y0, x1, y1]), `área ${area}`);
   }
 }
 

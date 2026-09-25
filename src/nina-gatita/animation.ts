@@ -172,7 +172,16 @@ const KITTEN_LAND_MS = 90;
 const KITTEN_TAIL = [0, 1, 1, 0, -1, -1, 0, 0, 0, 0] as const;
 const KITTEN_TAIL_STEP = 110;
 // Cabeceo: baja la cabeza un momento cada ~1,3 s (mira alrededor).
-const KITTEN_NOD = [false, false, false, true, true, false, false, false] as const;
+const KITTEN_NOD = [
+  false,
+  false,
+  false,
+  true,
+  true,
+  false,
+  false,
+  false,
+] as const;
 const KITTEN_NOD_STEP = 160;
 // Paso rápido del gatito: 4 fotogramas a 10 fps.
 const KITTEN_WALK = [

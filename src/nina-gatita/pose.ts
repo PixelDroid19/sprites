@@ -127,12 +127,15 @@ function overlay(g: Grid, layer: Grid) {
 export function closedEye(e: EyeAnchor): string[] {
   const w = e.x1 - e.x0 + 1;
   const h = e.y1 - e.y0 + 1;
-  const rows = Array.from({ length: h }, () => Array<string>(w).fill(e.fill ?? "s"));
+  const rows = Array.from({ length: h }, () =>
+    Array<string>(w).fill(e.fill ?? "s"),
+  );
   const lid = h - 3;
   const outer = e.outer === "left" ? 0 : w - 1;
   for (let x = 0; x < w; x++) rows[x === outer ? lid + 1 : lid][x] = "k";
   // Sombra de piel bajo el párpado: da volumen al ojo cerrado.
-  for (let x = 1; x < w - 1; x++) if (x !== outer) rows[lid + 1][x] = e.shade ?? "S";
+  for (let x = 1; x < w - 1; x++)
+    if (x !== outer) rows[lid + 1][x] = e.shade ?? "S";
   return rows.map((r) => r.join(""));
 }
 
@@ -140,7 +143,9 @@ export function closedEye(e: EyeAnchor): string[] {
 export function happyEye(e: EyeAnchor): string[] {
   const w = e.x1 - e.x0 + 1;
   const h = e.y1 - e.y0 + 1;
-  const rows = Array.from({ length: h }, () => Array<string>(w).fill(e.fill ?? "s"));
+  const rows = Array.from({ length: h }, () =>
+    Array<string>(w).fill(e.fill ?? "s"),
+  );
   const top = h - 4;
   for (let x = 0; x < w; x++) {
     const edge = x === 0 || x === w - 1;
