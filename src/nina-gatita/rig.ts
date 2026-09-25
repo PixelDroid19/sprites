@@ -172,12 +172,12 @@ const MIRROR_EAR: Partial<Record<SpriteId, Box>> = {
 // es donde iría el interior.
 const BACK_EARS: Partial<Record<SpriteId, EarBox[]>> = {
   arriba: [
-    { x0: 7, y0: 13, x1: 9, y1: 15, back: true },
-    { x0: 29, y0: 13, x1: 31, y1: 15, back: true },
+    { x0: 5, y0: 13, x1: 11, y1: 16, back: true },
+    { x0: 27, y0: 13, x1: 33, y1: 16, back: true },
   ],
   arribaDerecha: [
-    { x0: 7, y0: 14, x1: 9, y1: 16, back: true },
-    { x0: 32, y0: 14, x1: 33, y1: 16, back: true },
+    { x0: 5, y0: 14, x1: 11, y1: 17, back: true },
+    { x0: 28, y0: 14, x1: 34, y1: 17, back: true },
   ],
 };
 
@@ -190,25 +190,6 @@ function headCenter(rows: readonly string[]): number {
   const left = row.search(/[^.]/);
   const right = row.length - 1 - [...row].reverse().join("").search(/[^.]/);
   return (left + right) / 2;
-}
-
-// En los perfiles solo asoma una oreja: la lejana se añade 7 px hacia la
-// cara (asoma por delante de la cercana), 1 px más baja y vista por detrás.
-function withFarEar(ears: EarBox[], eyes: readonly EyeAnchor[]): EarBox[] {
-  if (ears.length !== 1 || eyes.length === 0) return ears;
-  const e = ears[0];
-  const toFace = Math.sign(eyes[0].x0 - e.x0) || 1;
-  return [
-    e,
-    {
-      ...e,
-      x0: e.x0 + 7 * toFace,
-      x1: e.x1 + 7 * toFace,
-      y0: e.y0 + 1,
-      y1: e.y1 + 1,
-      back: true,
-    },
-  ];
 }
 
 interface GirlSprite {
@@ -225,7 +206,7 @@ function buildGirl(id: SpriteId): GirlSprite {
   const crown = ear ? mirrorEar(noKitten.rows, ear) : noKitten.rows;
   const smooth = smoothCrown(crown);
   const center = headCenter(smooth);
-  const ears = BACK_EARS[id] ?? withFarEar(findEars(smooth), manual.eyes);
+  const ears = BACK_EARS[id] ?? findEars(smooth);
   // Tras dibujar las orejas se vuelve a suavizar la coronilla, sin tocarlas.
   const eared = smoothCrown(
     sharpenEars(smooth, ears, center),

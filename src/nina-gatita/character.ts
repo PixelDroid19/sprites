@@ -178,7 +178,7 @@ export function removeKitten(
   const half = Math.max(1, (b - a) / 2);
   for (let x = a; x <= b; x++) {
     const t = (x - mid) / half;
-    const want = Math.round(apex + 2 * t * t);
+    const want = Math.round(apex + 4 * t * t);
     for (let y = 0; y < want; y++)
       if (g[y][x] !== "p" && g[y][x] !== "P") g[y][x] = EMPTY;
     for (let y = want; y < limitY; y++) {
@@ -479,13 +479,15 @@ export function sharpenEars(
     const cx = (e.x0 + e.x1) / 2;
     const out = cx < headCenterX ? -1 : 1;
     const height = Math.round(width * 0.6);
-    const baseY = e.y0 + 1;
+    // La base queda 2 filas bajo el borde del rosa de la hoja: la oreja
+    // nace del lateral de la cabeza, no se posa encima.
+    const baseY = Math.min(e.y1, e.y0 + 2);
     return { e, width, cx, out, baseY, apexY: baseY - height };
   });
   // Primero se borran los muñones de todas las orejas y luego se dibujan:
   // así borrar una no se come la que ya estaba dibujada.
-  for (const { width, cx, baseY, apexY } of shapes)
-    for (let y = Math.max(0, apexY - 4); y < baseY - 1; y++)
+  for (const { width, cx, apexY } of shapes)
+    for (let y = Math.max(0, apexY - 6); y < apexY; y++)
       for (let x = Math.floor(cx - width); x <= Math.ceil(cx + width); x++)
         if (x >= 0 && x < w) g[y][x] = EMPTY;
   // El rosa de la hoja que quedaba por debajo de la base (hundido en el
@@ -499,7 +501,15 @@ export function sharpenEars(
   const order = [...shapes].sort(
     (p, q) => Number(!!q.e.back) - Number(!!p.e.back),
   );
-  for (const { e, width, cx, out, baseY, apexY } of order) {
+  // Borde izquierdo y derecho de cada oreja por fila (para la coronilla).
+  const spans = new Map<
+    (typeof shapes)[number],
+    Map<number, [number, number]>
+  >();
+  for (const shape of order) {
+    const { e, width, cx, out, baseY, apexY } = shape;
+    const span = new Map<number, [number, number]>();
+    spans.set(shape, span);
     for (let y = apexY; y <= baseY; y++) {
       const f = (y - apexY) / (baseY - apexY);
       const shift = out * Math.round(1 - f);
@@ -507,6 +517,7 @@ export function sharpenEars(
       const half = y === apexY ? 0 : Math.max(1, (f * (width - 1)) / 2);
       const left = Math.round(cx - half) + shift;
       const right = Math.round(cx + half) + shift;
+      span.set(y, [left, right]);
       for (let x = left; x <= right; x++) {
         if (x < 0 || x >= w) continue;
         const edge = x === left || x === right || y === apexY;
@@ -523,6 +534,126 @@ export function sharpenEars(
       }
     }
   }
+  if (shapes.length === 2) rebuildCrown(g, shapes, spans);
+  // Perfil (una sola oreja, como en la referencia): nada asoma junto a
+  // ella por encima de sus bordes.
+  if (shapes.length === 1) {
+    const one = shapes[0];
+    const sp = spans.get(one)!;
+    const toCenter = one.cx < headCenterX ? 1 : -1;
+    clearBeside(g, one, sp, [-toCenter]);
+    // Cúpula desde el borde interior de la oreja hasta el otro lado de la
+    // cabeza (su borde medido 3 filas bajo la base de la oreja).
+    const probe = g[one.baseY + 3];
+    const far =
+      toCenter > 0
+        ? probe.length -
+          1 -
+          [...probe].reverse().findIndex((ch) => ch !== EMPTY)
+        : probe.findIndex((ch) => ch !== EMPTY);
+    const [l, r] = sp.get(one.baseY)!;
+    const from = toCenter > 0 ? r + 1 : l - 1;
+    domeBetween(
+      g,
+      Math.min(from, far),
+      Math.max(from, far),
+      one.apexY + 3,
+      one.baseY + 1,
+      [sp],
+    );
+  }
+  dropIslands(g);
   closeOutline(g);
   return g.map((r) => r.join(""));
+}
+
+type EarShape = { apexY: number; baseY: number; cx: number };
+
+// Silueta de la coronilla como en la referencia: las puntas de las orejas
+// son lo más alto; entre ellas, una cúpula redondeada 3 px por debajo de
+// las puntas; por fuera, el pelo no sobresale del borde exterior de cada
+// oreja. Lo que asoma se borra y los huecos bajo la cúpula se rellenan.
+function rebuildCrown(
+  g: Grid,
+  shapes: readonly EarShape[],
+  spans: Map<EarShape, Map<number, [number, number]>>,
+) {
+  const w = g[0].length;
+  const [a, b] = [...shapes].sort((p, q) => p.cx - q.cx);
+  const sa = spans.get(a)!;
+  const sb = spans.get(b)!;
+  const inner0 = sa.get(a.baseY)![1] + 1;
+  const inner1 = sb.get(b.baseY)![0] - 1;
+  const top = Math.min(a.apexY, b.apexY) + 3;
+  const edge = Math.max(a.apexY, b.apexY) + 5;
+  domeBetween(g, inner0, inner1, top, edge, [sa, sb]);
+  // Por fuera de cada oreja: nada por encima de su borde exterior.
+  clearBeside(g, a, sa, [-1]);
+  clearBeside(g, b, sb, [1]);
+  for (let y = 0; y < Math.min(a.apexY, b.apexY); y++)
+    for (let x = 0; x < w; x++) g[y][x] = EMPTY;
+}
+
+// Borra lo que asoma junto a una oreja (4 px hacia cada lado indicado) por
+// encima de su base, para que su borde sea la silueta.
+function clearBeside(
+  g: Grid,
+  shape: EarShape,
+  span: Map<number, [number, number]>,
+  sides: readonly number[],
+) {
+  const w = g[0].length;
+  for (let y = 0; y < shape.baseY - 1; y++) {
+    const [l, r] = span.get(Math.max(y, shape.apexY))!;
+    for (const dir of sides)
+      for (let k = 0; k < 4; k++) {
+        const x = (dir < 0 ? l - 1 : r + 1) + dir * k;
+        if (x >= 0 && x < w) g[y][x] = EMPTY;
+      }
+  }
+}
+
+// Cúpula de pelo entre dos columnas: la cima (`top`) en el centro y
+// `edge` en los extremos. Se borra lo que sobresale (sin tocar orejas) y se
+// rellena lo que falta con contorno, sombra, base y un brillo central.
+function domeBetween(
+  g: Grid,
+  x0: number,
+  x1: number,
+  top: number,
+  edge: number,
+  ears: readonly Map<number, [number, number]>[],
+) {
+  const mid = (x0 + x1) / 2;
+  const half = Math.max(1, (x1 - x0) / 2);
+  const earAt = (x: number, y: number) =>
+    ears.some((sp) => {
+      const r = sp.get(y);
+      return r !== undefined && x >= r[0] && x <= r[1];
+    });
+  for (let x = x0; x <= x1; x++) {
+    const t = (x - mid) / half;
+    const want = Math.round(top + (edge - top) * t * t);
+    for (let y = 0; y < want; y++) if (!earAt(x, y)) g[y][x] = EMPTY;
+    for (let y = want; y < g.length; y++) {
+      if (earAt(x, y)) continue;
+      const depth = y - want;
+      const ch = g[y][x];
+      // Bajo la cúpula, el contorno antiguo de la coronilla (hasta 5 filas)
+      // queda dentro del pelo: pasa a pelo. Se para en el primer píxel de
+      // pelo de verdad.
+      const oldEdge = ch === EMPTY || (depth <= 5 && "kKdD".includes(ch));
+      if (depth > 1 && !oldEdge) break;
+      g[y][x] =
+        depth === 0
+          ? "k"
+          : depth === 1
+            ? "D"
+            : Math.abs(t) < 0.4 && depth === 2
+              ? "L"
+              : ch === EMPTY || ch === "k" || ch === "K"
+                ? "B"
+                : "H";
+    }
+  }
 }
