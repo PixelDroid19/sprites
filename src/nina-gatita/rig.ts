@@ -2,9 +2,12 @@
 // los ojos y las colas. La animación nunca mueve píxeles sueltos: mueve
 // regiones definidas desde estos anclajes, así las partes siguen unidas.
 import {
+  type EarBox,
   cleanUnderEyes,
   dryEyes,
+  findEars,
   mirrorEar,
+  sharpenEars,
   removeKitten,
   smoothCrown,
   tailFromBack,
@@ -165,8 +168,48 @@ const MIRROR_EAR: Partial<Record<SpriteId, Box>> = {
   arriba: box(5, 10, 10, 15),
 };
 
+// Orejas de las vistas de espalda (no tienen rosa que las marque): la caja
+// es donde iría el interior.
+const BACK_EARS: Partial<Record<SpriteId, EarBox[]>> = {
+  arriba: [
+    { x0: 7, y0: 13, x1: 9, y1: 15, back: true },
+    { x0: 29, y0: 13, x1: 31, y1: 15, back: true },
+  ],
+  arribaDerecha: [
+    { x0: 7, y0: 14, x1: 9, y1: 16, back: true },
+    { x0: 32, y0: 14, x1: 33, y1: 16, back: true },
+  ],
+};
+
 // Vistas de espalda: la cola sale del centro de la espalda, no de un lado.
 const TAIL_FROM_BACK: SpriteId[] = ["arriba", "arribaDerecha"];
+
+// Centro de la cabeza: mitad de su ancho en la fila 20.
+function headCenter(rows: readonly string[]): number {
+  const row = rows[20];
+  const left = row.search(/[^.]/);
+  const right = row.length - 1 - [...row].reverse().join("").search(/[^.]/);
+  return (left + right) / 2;
+}
+
+// En los perfiles solo asoma una oreja: la lejana se añade 7 px hacia la
+// cara (asoma por delante de la cercana), 1 px más baja y vista por detrás.
+function withFarEar(ears: EarBox[], eyes: readonly EyeAnchor[]): EarBox[] {
+  if (ears.length !== 1 || eyes.length === 0) return ears;
+  const e = ears[0];
+  const toFace = Math.sign(eyes[0].x0 - e.x0) || 1;
+  return [
+    e,
+    {
+      ...e,
+      x0: e.x0 + 7 * toFace,
+      x1: e.x1 + 7 * toFace,
+      y0: e.y0 + 1,
+      y1: e.y1 + 1,
+      back: true,
+    },
+  ];
+}
 
 interface GirlSprite {
   rows: readonly string[];
@@ -180,10 +223,14 @@ function buildGirl(id: SpriteId): GirlSprite {
   const noKitten = removeKitten(REFERENCE_SPRITES[id].rows);
   const ear = MIRROR_EAR[id];
   const crown = ear ? mirrorEar(noKitten.rows, ear) : noKitten.rows;
-  let rows = dryEyes(
-    cleanUnderEyes(smoothCrown(crown), manual.eyes),
-    manual.eyes,
+  const smooth = smoothCrown(crown);
+  const center = headCenter(smooth);
+  const eared = sharpenEars(
+    smooth,
+    BACK_EARS[id] ?? withFarEar(findEars(smooth), manual.eyes),
+    center,
   );
+  let rows = dryEyes(cleanUnderEyes(eared, manual.eyes), manual.eyes);
   const auto = autoAnchors(rows, manual.tail);
   let tail = manual.tail;
   let tailLayer: string[] | undefined;
@@ -202,7 +249,12 @@ function buildGirl(id: SpriteId): GirlSprite {
       eyes: manual.eyes,
       tail,
       tailLayer,
-      seat: noKitten.seat,
+      // El asiento se mide sobre la figura final (orejas y coronilla ya
+      // rehechas): primera fila opaca en su columna.
+      seat: {
+        x: noKitten.seat.x,
+        y: rows.findIndex((r) => r[noKitten.seat.x] !== "."),
+      },
     },
   };
 }

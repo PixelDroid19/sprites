@@ -412,3 +412,104 @@ export function mirrorEar(
   closeOutline(g);
   return g.map((r) => r.join(""));
 }
+
+export interface EarBox {
+  // Parte interior de la oreja (el rosa, o donde iría en las de espalda).
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  // Vista de espalda: la oreja se ve por detrás, sin rosa.
+  back?: boolean;
+}
+
+// Orejas de gato: el rosa de cada oreja (componente de "p"/"P" por encima
+// de `limitY`, 4+ px) marca dónde está.
+export function findEars(rows: readonly string[], limitY = 24): EarBox[] {
+  const seen = rows.map((r) => [...r].map(() => false));
+  const ears: EarBox[] = [];
+  const pink = (x: number, y: number) =>
+    y < limitY && (rows[y]?.[x] === "p" || rows[y]?.[x] === "P");
+  for (let y = 0; y < limitY; y++)
+    for (let x = 0; x < rows[0].length; x++) {
+      if (!pink(x, y) || seen[y][x]) continue;
+      const stack = [[x, y]];
+      seen[y][x] = true;
+      const b = { x0: x, y0: y, x1: x, y1: y };
+      let n = 0;
+      while (stack.length) {
+        const [cx, cy] = stack.pop()!;
+        n++;
+        b.x0 = Math.min(b.x0, cx);
+        b.x1 = Math.max(b.x1, cx);
+        b.y0 = Math.min(b.y0, cy);
+        b.y1 = Math.max(b.y1, cy);
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++)
+            if (pink(cx + dx, cy + dy) && !seen[cy + dy][cx + dx]) {
+              seen[cy + dy][cx + dx] = true;
+              stack.push([cx + dx, cy + dy]);
+            }
+      }
+      if (n >= 4) ears.push(b);
+    }
+  return ears;
+}
+
+// Punta de oreja limpia sobre cada caja: se borran los muñones que había
+// encima y se dibuja un triángulo de contorno 1 px, con la punta 1 px
+// hacia fuera de la cabeza, pelaje en el borde (más claro en el lado de la
+// luz, arriba-izquierda) y el rosa del interior continuando hacia arriba.
+export function sharpenEars(
+  rows: readonly string[],
+  ears: readonly EarBox[],
+  headCenterX: number,
+): string[] {
+  const g: Grid = rows.map((r) => [...r]);
+  const w = g[0].length;
+  const shapes = ears.map((e) => {
+    const inner = e.x1 - e.x0 + 1;
+    const width = Math.min(9, Math.max(7, inner + 3));
+    const cx = (e.x0 + e.x1) / 2;
+    const out = cx < headCenterX ? -1 : 1;
+    const height = Math.ceil(width / 2) + 3;
+    const baseY = e.y0 + 1;
+    return { e, width, cx, out, baseY, apexY: baseY - height };
+  });
+  // Primero se borran los muñones de todas las orejas y luego se dibujan:
+  // así borrar una no se come la que ya estaba dibujada.
+  for (const { width, cx, baseY, apexY } of shapes)
+    for (let y = Math.max(0, apexY - 4); y < baseY - 1; y++)
+      for (let x = Math.floor(cx - width); x <= Math.ceil(cx + width); x++)
+        if (x >= 0 && x < w) g[y][x] = EMPTY;
+  // Las lejanas (de espalda) primero, para que la cercana quede delante.
+  const order = [...shapes].sort(
+    (p, q) => Number(!!q.e.back) - Number(!!p.e.back),
+  );
+  for (const { e, width, cx, out, baseY, apexY } of order) {
+    for (let y = apexY; y <= baseY; y++) {
+      const f = (y - apexY) / (baseY - apexY);
+      const shift = out * Math.round(1 - f);
+      // La punta es 1 px; debajo ya se abre a 3 (sin palito de 2 filas).
+      const half = y === apexY ? 0 : Math.max(1, (f * (width - 1)) / 2);
+      const left = Math.round(cx - half) + shift;
+      const right = Math.round(cx + half) + shift;
+      for (let x = left; x <= right; x++) {
+        if (x < 0 || x >= w) continue;
+        const edge = x === left || x === right || y === apexY;
+        const innerCol = x > left + 1 && x < right - 1 && y >= apexY + 2;
+        g[y][x] = edge
+          ? "k"
+          : innerCol && !e.back
+            ? y - apexY <= 2
+              ? "p"
+              : "P"
+            : x - left < right - x
+              ? "B"
+              : "H";
+      }
+    }
+  }
+  closeOutline(g);
+  return g.map((r) => r.join(""));
+}
