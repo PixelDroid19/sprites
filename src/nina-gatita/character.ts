@@ -462,40 +462,39 @@ export function findEars(rows: readonly string[], limitY = 24): EarBox[] {
   return ears;
 }
 
-// Orejas dibujadas a mano, como en la referencia: triángulo marrón con la
-// punta hacia fuera y una cuña estrecha de rosa en el lado exterior. Se
-// escribe la izquierda; la derecha es su espejo. La última fila se apoya en
-// la coronilla y se alarga hacia abajo hasta tocar el pelo.
+// Orejas dibujadas a mano calcando la hoja (celda a celda): la oreja es la
+// esquina superior de la cabeza. Punta 2 filas por encima de la coronilla,
+// borde exterior vertical que continúa el lateral del pelo (k-h-H) y una
+// cuña de rosa de 2-3 px que nace 2 filas bajo la punta y baja 7 filas
+// dentro del pelo. Se escribe la izquierda; la derecha es su espejo.
 const EAR_CORNER = [
-  ".k.......",
-  ".kk......",
-  "kpDk.....",
-  "kppBk....",
-  "kpPHBk...",
-  "kpPPHBk..",
-  "kPPPBBBk.",
-  "kPPBBBBBk",
+  ".k........",
+  ".kk.......",
+  "khDk......",
+  "khHDk.....",
+  "khHpBk....",
+  "khHppBk...",
+  "khHpPBBk..",
+  "khHPPPBBk.",
+  "khHPPPBBBk",
+  "khhPPPBBBB",
+  "khhBPPBBBB",
+  "khhBBPBBBB",
 ];
-// De espaldas se ve el dorso de la oreja: todo pelo.
-const EAR_BACK = [
-  ".k.......",
-  ".kk......",
-  "kHDk.....",
-  "kHBBk....",
-  "kHBBBk...",
-  "kBBBBDk..",
-  "kBBBBDDk.",
-  "kBBBBBDDk",
-];
-// De perfil, una sola oreja con el rosa hacia la cara (aquí, izquierda).
+// De espaldas se ve el dorso: la misma silueta, todo pelo.
+const EAR_BACK = EAR_CORNER.map((r) => r.replace(/p/g, "B").replace(/P/g, "D"));
+// De perfil, una sola oreja en la nuca con el rosa hacia la cara (aquí,
+// la izquierda).
 const EAR_PROFILE = [
-  "....k....",
-  "...kpk...",
-  "..kppDk..",
-  "..kpPHBk.",
-  ".kpPPHBk.",
-  ".kpPPBBBk",
-  "kPPPBBBBk",
+  "...k.....",
+  "..kDk....",
+  "..kpHk...",
+  ".kppHBk..",
+  ".kpPPBBk.",
+  "kpPPPBBBk",
+  "kBPPPBBBB",
+  "BBPPBBBBB",
+  "BBBPBBBBB",
 ];
 
 export type EarLayout =
@@ -554,50 +553,37 @@ export function drawEars(
   }
   const crown = g.map((r) => r.join(""));
   const surface = (x: number) => crown.findIndex((r) => r[x] !== EMPTY);
-  const stamp = (
-    art: readonly string[],
-    x0: number,
-    bottom: number,
-    outer: number,
-  ) => {
-    const y0 = bottom - art.length + 1;
+  // Por encima de la coronilla se pinta la oreja entera. Por debajo, dentro
+  // del pelo, solo el rosa y el borde exterior (el lateral de la cabeza):
+  // el resto conserva el pelo de la hoja y no queda costura.
+  const stamp = (art: readonly string[], x0: number, mirrored: boolean) => {
+    const y0 = top - 2;
+    const cols = art[0].length;
     art.forEach((row, dy) =>
       [...row].forEach((ch, dx) => {
-        if (ch === EMPTY) return;
         const x = x0 + dx;
-        if (x < 0 || x >= w) return;
         const y = y0 + dy;
-        // Por debajo de la coronilla la oreja ya es pelo: sin contorno
-        // interior que se lea como una costura.
+        if (ch === EMPTY || x < 0 || x >= w || y < 0) return;
         const s = surface(x);
-        if (s >= 0 && y > s + ("pP".includes(ch) ? 2 : 0)) {
-          if (!"kpP".includes(ch)) g[y][x] = ch;
-          return;
-        }
-        g[y][x] = ch;
-        // La base baja hasta el pelo: la oreja no flota.
-        if (dy === art.length - 1)
-          for (
-            let y = bottom + 1;
-            y < g.length &&
-            (g[y][x] === EMPTY || (y - bottom <= 4 && "kKD".includes(g[y][x])));
-            y++
-          )
-            g[y][x] = ch === "k" && dx === outer ? "k" : ch === "k" ? "D" : "B";
+        const fromOuter = mirrored ? cols - 1 - dx : dx;
+        const inside = s >= 0 && y > s;
+        if (!inside) g[y][x] = ch;
+        else if ("pP".includes(ch)) g[y][x] = ch;
+        else if (layout.kind !== "profile" && fromOuter < 3 && y <= s + 2)
+          g[y][x] = ch;
       }),
     );
   };
-  const bottom = top + 2;
   if (layout.kind === "profile") {
-    const art = layout.faces < 0 ? EAR_PROFILE : mirror(EAR_PROFILE);
+    const right = layout.faces < 0;
+    const art = right ? EAR_PROFILE : mirror(EAR_PROFILE);
     // En la nuca (lado contrario a la cara): el gatito se tumba hacia la
     // cara y la oreja queda a la vista, como en la referencia.
-    const x0 = layout.faces < 0 ? R - art[0].length + 1 : L;
-    stamp(art, x0, bottom, layout.faces < 0 ? art[0].length - 1 : 0);
+    stamp(art, right ? R - art[0].length + 1 : L, right);
   } else {
     const art = layout.kind === "back" ? EAR_BACK : EAR_CORNER;
-    stamp(art, L, bottom, 0);
-    stamp(mirror(art), R - art[0].length + 1, bottom, art[0].length - 1);
+    stamp(art, L, false);
+    stamp(mirror(art), R - art[0].length + 1, true);
   }
   dropIslands(g);
   closeOutline(g);
