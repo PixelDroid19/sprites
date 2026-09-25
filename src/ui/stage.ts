@@ -368,6 +368,18 @@ export function createStage(): HTMLElement {
     } else {
       girl();
       kittenDraw();
+      // En la cabeza, el gatito queda entre las orejas, no encima.
+      if (kitten.state === "head")
+        drawCharacter(ctx, {
+          sprite: dir.sprite,
+          flip: dir.flip,
+          pose: anim.pose,
+          x,
+          y,
+          lift: anim.lift,
+          mode: view.mode,
+          earsOnly: true,
+        });
     }
     if (anim.bubble) {
       // Arriba a la derecha de la cabeza, como en el panel "Detalle".

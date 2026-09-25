@@ -121,6 +121,8 @@ export interface CharacterDraw {
   lift?: number;
   mode?: ViewMode;
   override?: EyeOverride;
+  // Solo las orejas (se pintan de nuevo delante del gatito en la cabeza).
+  earsOnly?: boolean;
 }
 
 // Esquina superior izquierda del sprite ya colocado sobre su apoyo.
@@ -135,8 +137,28 @@ export function spriteOrigin(
   };
 }
 
+// Fotograma filtrado a la capa de orejas, desplazada con la cabeza.
+function earSurface(id: ActorId, pose: Pose, mode: ViewMode): Surface | null {
+  const layer = actor(id).rig.earLayer;
+  if (!layer) return null;
+  return remember(surfaceCache, `${id}|${poseKey(pose)}|${mode}|orejas`, () => {
+    const drop = Number(pose.headDrop) + Number(pose.bodyDrop);
+    const rows = getFrame(id, pose).map((row, y) =>
+      [...row]
+        .map((ch, x) => ((layer[y - drop]?.[x] ?? ".") !== "." ? ch : "."))
+        .join(""),
+    );
+    const surface = createSurface(rows[0].length, rows.length);
+    paintRows(surface.getContext("2d")!, rows, 0, 0, mode);
+    return surface;
+  });
+}
+
 export function drawCharacter(ctx: Ctx, d: CharacterDraw) {
-  const surface = frameSurface(d.sprite, d.pose, d.mode ?? "color", d.override);
+  const surface = d.earsOnly
+    ? earSurface(d.sprite, d.pose, d.mode ?? "color")
+    : frameSurface(d.sprite, d.pose, d.mode ?? "color", d.override);
+  if (!surface) return;
   const o = spriteOrigin(d);
   ctx.save();
   if (d.flip) {

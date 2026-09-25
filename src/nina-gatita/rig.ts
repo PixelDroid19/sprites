@@ -2,12 +2,12 @@
 // los ojos y las colas. La animación nunca mueve píxeles sueltos: mueve
 // regiones definidas desde estos anclajes, así las partes siguen unidas.
 import {
-  type EarBox,
+  type EarLayout,
   cleanUnderEyes,
   dryEyes,
   findEars,
   mirrorEar,
-  sharpenEars,
+  drawEars,
   removeKitten,
   smoothCrown,
   tailFromBack,
@@ -58,6 +58,8 @@ export interface Rig {
   tail: TailAnchor;
   // Cola en capa propia, pintada encima del cuerpo (vistas de espalda).
   tailLayer?: readonly string[];
+  // Orejas por encima de la coronilla: se repintan delante del gatito.
+  earLayer?: readonly string[];
   // Dónde se sienta el gatito: centro de la coronilla.
   seat: { x: number; y: number };
 }
@@ -168,18 +170,24 @@ const MIRROR_EAR: Partial<Record<SpriteId, Box>> = {
   arriba: box(5, 10, 10, 15),
 };
 
-// Orejas de las vistas de espalda (no tienen rosa que las marque): la caja
-// es donde iría el interior.
-const BACK_EARS: Partial<Record<SpriteId, EarBox[]>> = {
-  arriba: [
-    { x0: 5, y0: 13, x1: 11, y1: 16, back: true },
-    { x0: 27, y0: 13, x1: 33, y1: 16, back: true },
-  ],
-  arribaDerecha: [
-    { x0: 5, y0: 14, x1: 11, y1: 17, back: true },
-    { x0: 28, y0: 14, x1: 34, y1: 17, back: true },
-  ],
+// Orejas de cada figura, como en la referencia: dos en las esquinas de la
+// cabeza (de frente, con rosa; de espalda, solo pelo) o una de perfil, con
+// el rosa hacia la cara.
+const EARS: Record<SpriteId, EarLayout> = {
+  abajoIzquierda: { kind: "pair" },
+  abajo: { kind: "pair" },
+  abajoDerecha: { kind: "pair" },
+  arribaIzquierda: { kind: "pair" },
+  izquierdaFila1: { kind: "profile", faces: -1 },
+  derecha: { kind: "profile", faces: 1 },
+  izquierda: { kind: "profile", faces: -1 },
+  arriba: { kind: "back" },
+  arribaDerecha: { kind: "back" },
 };
+
+// De frente el gatito apoya la barbilla redonda: sin hundirlo un poco más
+// parece flotar sobre la coronilla.
+const SEAT_SINK: Partial<Record<SpriteId, number>> = { abajo: 2 };
 
 // Vistas de espalda: la cola sale del centro de la espalda, no de un lado.
 const TAIL_FROM_BACK: SpriteId[] = ["arriba", "arribaDerecha"];
@@ -206,13 +214,16 @@ function buildGirl(id: SpriteId): GirlSprite {
   const crown = ear ? mirrorEar(noKitten.rows, ear) : noKitten.rows;
   const smooth = smoothCrown(crown);
   const center = headCenter(smooth);
-  const ears = BACK_EARS[id] ?? findEars(smooth);
-  // Tras dibujar las orejas se vuelve a suavizar la coronilla, sin tocarlas.
-  const eared = smoothCrown(
-    sharpenEars(smooth, ears, center),
-    20,
-    ears.map((e) => [e.x0 - 7, e.x1 + 7] as [number, number]),
-  );
+  const {
+    rows: eared,
+    crown: bare,
+    ears: earLayer,
+  } = drawEars(smooth, EARS[id], findEars(smooth), center);
+  // De perfil el gatito se corre 4 px hacia la cara para dejar ver la
+  // oreja de la nuca.
+  const layout = EARS[id];
+  const seatX =
+    noKitten.seat.x + (layout.kind === "profile" ? layout.faces * 4 : 0);
   let rows = dryEyes(cleanUnderEyes(eared, manual.eyes), manual.eyes);
   const auto = autoAnchors(rows, manual.tail);
   let tail = manual.tail;
@@ -232,11 +243,12 @@ function buildGirl(id: SpriteId): GirlSprite {
       eyes: manual.eyes,
       tail,
       tailLayer,
+      earLayer,
       // El asiento se mide sobre la figura final (orejas y coronilla ya
       // rehechas): primera fila opaca en su columna.
       seat: {
-        x: noKitten.seat.x,
-        y: rows.findIndex((r) => r[noKitten.seat.x] !== "."),
+        x: seatX,
+        y: bare.findIndex((r) => r[seatX] !== ".") + (SEAT_SINK[id] ?? 0),
       },
     },
   };

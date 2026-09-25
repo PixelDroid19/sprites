@@ -63,6 +63,8 @@ Revisa esta lista en **cada** figura y corrige con reglas en código
 | Antenas, pelos de 1-3 px, islas                | restos al borrar                               | `smoothCrown` (sin tocar orejas: tienen rosa), `dropIslands`, `pruneDanglingOutline` |
 | Gris al pie del ojo                            | parece una lágrima                             | `dryEyes`                                                                            |
 | Parte tapada por otro personaje                | falta una oreja al quitar el gatito            | Espejo de la simétrica (`mirrorEar`)                                                 |
+| Rasgo pequeño deformado (orejas)               | rosa enorme, bordes rotos, cortes en el pelo   | Borrarlo y estampar una forma dibujada a mano sobre una cúpula lisa (`drawEars`)     |
+| Secundario que tapa un rasgo                   | el gatito en la cabeza oculta las orejas       | Capa aparte que se repinta delante (`earLayer`); de perfil, correr el asiento        |
 
 Regla: si una vista contradice a las demás, las demás mandan. Si la hoja
 tiene un panel aparte del personaje secundario (p. ej. "Gatito (solo)"),

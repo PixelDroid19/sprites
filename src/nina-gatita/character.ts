@@ -462,154 +462,86 @@ export function findEars(rows: readonly string[], limitY = 24): EarBox[] {
   return ears;
 }
 
-// Punta de oreja limpia sobre cada caja: se borran los muñones que había
-// encima y se dibuja un triángulo de contorno 1 px, con la punta 1 px
-// hacia fuera de la cabeza, pelaje en el borde (más claro en el lado de la
-// luz, arriba-izquierda) y el rosa del interior continuando hacia arriba.
-export function sharpenEars(
+// Orejas dibujadas a mano, como en la referencia: triángulo marrón con la
+// punta hacia fuera y una cuña estrecha de rosa en el lado exterior. Se
+// escribe la izquierda; la derecha es su espejo. La última fila se apoya en
+// la coronilla y se alarga hacia abajo hasta tocar el pelo.
+const EAR_CORNER = [
+  ".k.......",
+  ".kk......",
+  "kpDk.....",
+  "kppBk....",
+  "kpPHBk...",
+  "kpPPHBk..",
+  "kPPPBBBk.",
+  "kPPBBBBBk",
+];
+// De espaldas se ve el dorso de la oreja: todo pelo.
+const EAR_BACK = [
+  ".k.......",
+  ".kk......",
+  "kHDk.....",
+  "kHBBk....",
+  "kHBBBk...",
+  "kBBBBDk..",
+  "kBBBBDDk.",
+  "kBBBBBDDk",
+];
+// De perfil, una sola oreja con el rosa hacia la cara (aquí, izquierda).
+const EAR_PROFILE = [
+  "....k....",
+  "...kpk...",
+  "..kppDk..",
+  "..kpPHBk.",
+  ".kpPPHBk.",
+  ".kpPPBBBk",
+  "kPPPBBBBk",
+];
+
+export type EarLayout =
+  { kind: "pair" } | { kind: "back" } | { kind: "profile"; faces: -1 | 1 };
+
+const mirror = (art: readonly string[]) =>
+  art.map((r) => [...r].reverse().join(""));
+
+// Coronilla y orejas desde cero. `stale` son las cajas de rosa de la hoja:
+// ese rosa (demasiado grande y hundido en el pelo) pasa a pelo. Después se
+// rehace la coronilla como una cúpula lisa y se estampan las orejas.
+export function drawEars(
   rows: readonly string[],
-  ears: readonly EarBox[],
-  headCenterX: number,
-): string[] {
+  layout: EarLayout,
+  stale: readonly EarBox[],
+  centerX: number,
+): { rows: string[]; crown: string[]; ears: string[] } {
   const g: Grid = rows.map((r) => [...r]);
   const w = g[0].length;
-  const shapes = ears.map((e) => {
-    const inner = e.x1 - e.x0 + 1;
-    const width = Math.min(13, Math.max(11, inner + 5));
-    const cx = (e.x0 + e.x1) / 2;
-    const out = cx < headCenterX ? -1 : 1;
-    const height = Math.round(width * 0.6);
-    // La base queda 2 filas bajo el borde del rosa de la hoja: la oreja
-    // nace del lateral de la cabeza, no se posa encima.
-    const baseY = Math.min(e.y1, e.y0 + 2);
-    return { e, width, cx, out, baseY, apexY: baseY - height };
-  });
-  // Primero se borran los muñones de todas las orejas y luego se dibujan:
-  // así borrar una no se come la que ya estaba dibujada.
-  for (const { width, cx, apexY } of shapes)
-    for (let y = Math.max(0, apexY - 6); y < apexY; y++)
-      for (let x = Math.floor(cx - width); x <= Math.ceil(cx + width); x++)
-        if (x >= 0 && x < w) g[y][x] = EMPTY;
-  // El rosa de la hoja que quedaba por debajo de la base (hundido en el
-  // pelo) se leía como una mancha: pasa a pelo.
-  for (const { e, baseY } of shapes)
-    for (let y = baseY; y <= e.y1 + 1; y++)
+  for (const e of stale)
+    for (let y = e.y0 - 1; y <= e.y1 + 1; y++)
       for (let x = e.x0 - 1; x <= e.x1 + 1; x++)
-        if (x >= 0 && x < w && "pPSRir".includes(g[y]?.[x] ?? EMPTY))
-          g[y][x] = y === baseY + 1 ? "D" : "B";
-  // Las lejanas (de espalda) primero, para que la cercana quede delante.
-  const order = [...shapes].sort(
-    (p, q) => Number(!!q.e.back) - Number(!!p.e.back),
-  );
-  // Borde izquierdo y derecho de cada oreja por fila (para la coronilla).
-  const spans = new Map<
-    (typeof shapes)[number],
-    Map<number, [number, number]>
-  >();
-  for (const shape of order) {
-    const { e, width, cx, out, baseY, apexY } = shape;
-    const span = new Map<number, [number, number]>();
-    spans.set(shape, span);
-    for (let y = apexY; y <= baseY; y++) {
-      const f = (y - apexY) / (baseY - apexY);
-      const shift = out * Math.round(1 - f);
-      // La punta es 1 px; debajo ya se abre a 3 (sin palito de 2 filas).
-      const half = y === apexY ? 0 : Math.max(1, (f * (width - 1)) / 2);
-      const left = Math.round(cx - half) + shift;
-      const right = Math.round(cx + half) + shift;
-      span.set(y, [left, right]);
-      for (let x = left; x <= right; x++) {
-        if (x < 0 || x >= w) continue;
-        const edge = x === left || x === right || y === apexY;
-        const innerCol = x > left + 1 && x < right - 1 && y >= apexY + 2;
-        g[y][x] = edge
-          ? "k"
-          : innerCol && !e.back
-            ? y - apexY <= 2
-              ? "p"
-              : "P"
-            : x - left < right - x
-              ? "B"
-              : "H";
-      }
-    }
-  }
-  crown(g, shapes, spans);
-  // Pinchos laterales bajo la base de la oreja (1 px sin nada encima ni
-  // debajo): se leen como pelos sueltos.
-  const base = Math.max(...shapes.map((s) => s.baseY));
-  for (let pass = 0; pass < 2; pass++)
-    for (let y = base - 2; y <= base + 5 && y + 1 < g.length; y++)
-      for (let x = 0; x < w; x++)
-        if (
-          g[y][x] !== EMPTY &&
-          (g[y - 1]?.[x] ?? EMPTY) === EMPTY &&
-          g[y + 1][x] === EMPTY
-        )
-          g[y][x] = EMPTY;
-  dropIslands(g);
-  closeOutline(g);
-  return g.map((r) => r.join(""));
-}
-
-type EarShape = { apexY: number; baseY: number; cx: number };
-
-// Silueta de la coronilla como en la referencia: una sola elipse de pelo
-// de lado a lado de la cabeza, con la cima 2-3 px bajo las puntas de las
-// orejas, y las orejas encima. Lo que asoma por encima se borra, los huecos
-// debajo se rellenan y el contorno de la oreja que queda dentro del pelo
-// pasa a pelo: la oreja nace de la cabeza sin cortes ni escalones.
-function crown(
-  g: Grid,
-  shapes: readonly (EarShape & { out: number })[],
-  spans: Map<EarShape, Map<number, [number, number]>>,
-) {
-  const w = g[0].length;
-  const base = Math.max(...shapes.map((s) => s.baseY));
-  const apex = Math.min(...shapes.map((s) => s.apexY));
-  const probe = g[Math.min(g.length - 1, base + 3)];
-  let L = probe.findIndex((ch) => ch !== EMPTY);
-  let R =
+        if (x >= 0 && x < w && "pPirSR".includes(at(g, x, y))) g[y][x] = "B";
+  const cx = Math.round(centerX);
+  const top = g.findIndex((r) => r[cx] !== EMPTY);
+  const edge = top + 6;
+  const probe = g[top + 8];
+  const L = probe.findIndex((ch) => ch !== EMPTY);
+  const R =
     probe.length - 1 - [...probe].reverse().findIndex((ch) => ch !== EMPTY);
-  for (const s of shapes) {
-    const [l, r] = spans.get(s)!.get(s.baseY)!;
-    L = Math.min(L, l);
-    R = Math.max(R, r);
-  }
-  const top = apex + (shapes.length === 2 ? 3 : 2);
-  const edge = base + 2;
   const mid = (L + R) / 2;
   const half = (R - L) / 2 + 0.5;
-  const earAt = (x: number, y: number) =>
-    shapes.some((s) => {
-      const r = spans.get(s)!.get(y);
-      return r !== undefined && x >= r[0] && x <= r[1];
-    });
-  const want = (x: number) => {
-    const t = Math.min(1, Math.abs(x - mid) / half);
-    return Math.round(top + (edge - top) * t * t);
-  };
+  // Cúpula: se borra lo que asoma y se rellena lo que falta.
   for (let x = 0; x < w; x++) {
     if (x < L || x > R) {
-      for (let y = 0; y < base; y++) if (!earAt(x, y)) g[y][x] = EMPTY;
+      for (let y = 0; y < edge; y++) g[y][x] = EMPTY;
       continue;
     }
-    const top = want(x);
-    for (let y = 0; y < top; y++) if (!earAt(x, y)) g[y][x] = EMPTY;
-    for (let y = top; y < g.length; y++) {
-      const depth = y - top;
+    const t = (x - mid) / half;
+    const want = Math.round(top + (edge - top) * t * t);
+    for (let y = 0; y < want; y++) g[y][x] = EMPTY;
+    for (let y = want; y <= edge + 2; y++) {
+      const depth = y - want;
       const ch = g[y][x];
-      if (earAt(x, y)) {
-        // Contorno de la oreja por debajo de la superficie: ya es pelo.
-        if (depth >= 1 && ch === "k") g[y][x] = depth === 1 ? "D" : "B";
-        if (depth >= 1) continue;
-        continue;
-      }
-      const oldEdge = ch === EMPTY || (depth <= 5 && "kKdD".includes(ch));
-      if (depth > 1 && !oldEdge) break;
-      // Fuera del lateral de la cabeza no se alarga el pelo hacia abajo.
-      if (ch === EMPTY && y > edge) break;
-      const t = (x - mid) / half;
+      const stale = ch === EMPTY || (depth <= 5 && "kKdD".includes(ch));
+      if (depth > 1 && !stale) break;
       g[y][x] =
         depth === 0
           ? "k"
@@ -617,9 +549,70 @@ function crown(
             ? "D"
             : Math.abs(t) < 0.3 && depth === 2
               ? "L"
-              : ch === EMPTY || ch === "k" || ch === "K"
-                ? "B"
-                : "H";
+              : "B";
     }
   }
+  const crown = g.map((r) => r.join(""));
+  const surface = (x: number) => crown.findIndex((r) => r[x] !== EMPTY);
+  const stamp = (
+    art: readonly string[],
+    x0: number,
+    bottom: number,
+    outer: number,
+  ) => {
+    const y0 = bottom - art.length + 1;
+    art.forEach((row, dy) =>
+      [...row].forEach((ch, dx) => {
+        if (ch === EMPTY) return;
+        const x = x0 + dx;
+        if (x < 0 || x >= w) return;
+        const y = y0 + dy;
+        // Por debajo de la coronilla la oreja ya es pelo: sin contorno
+        // interior que se lea como una costura.
+        const s = surface(x);
+        if (s >= 0 && y > s + ("pP".includes(ch) ? 2 : 0)) {
+          if (!"kpP".includes(ch)) g[y][x] = ch;
+          return;
+        }
+        g[y][x] = ch;
+        // La base baja hasta el pelo: la oreja no flota.
+        if (dy === art.length - 1)
+          for (
+            let y = bottom + 1;
+            y < g.length &&
+            (g[y][x] === EMPTY || (y - bottom <= 4 && "kKD".includes(g[y][x])));
+            y++
+          )
+            g[y][x] = ch === "k" && dx === outer ? "k" : ch === "k" ? "D" : "B";
+      }),
+    );
+  };
+  const bottom = top + 2;
+  if (layout.kind === "profile") {
+    const art = layout.faces < 0 ? EAR_PROFILE : mirror(EAR_PROFILE);
+    // En la nuca (lado contrario a la cara): el gatito se tumba hacia la
+    // cara y la oreja queda a la vista, como en la referencia.
+    const x0 = layout.faces < 0 ? R - art[0].length + 1 : L;
+    stamp(art, x0, bottom, layout.faces < 0 ? art[0].length - 1 : 0);
+  } else {
+    const art = layout.kind === "back" ? EAR_BACK : EAR_CORNER;
+    stamp(art, L, bottom, 0);
+    stamp(mirror(art), R - art[0].length + 1, bottom, art[0].length - 1);
+  }
+  dropIslands(g);
+  closeOutline(g);
+  const rows2 = g.map((r) => r.join(""));
+  // Capa de orejas: lo que asoma por encima de la coronilla. Se pinta otra
+  // vez sobre el gatito para que quede recostado entre las orejas.
+  const ears = rows2.map((r, y) =>
+    [...r]
+      .map((ch, x) => {
+        const s = surface(x);
+        return ch !== EMPTY && (s < 0 || y < s + 1) && ch !== crown[y][x]
+          ? ch
+          : EMPTY;
+      })
+      .join(""),
+  );
+  return { rows: rows2, crown, ears };
 }
