@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Niña Gatita · pixel art en Canvas</title>
+    <meta
+      name="description"
+      content="Personaje pintado píxel a píxel en Canvas 2D desde su hoja de referencia, animado por partes con anclajes."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Pixelify+Sans&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <p class="ng-eyebrow">Pixel art con Canvas 2D</p>
+        <h1>La Niña Gatita, píxel a píxel</h1>
+        <p>
+          Cada figura se pinta en JavaScript con <code>fillRect</code> de 1×1
+          sobre una rejilla lógica y se escala con factor entero. Los píxeles
+          salen de la hoja de referencia
+          (<code>public/referencia/nina-gatita-referencia.webp</code>) con
+          <code>npm run extract</code>; toda la animación se construye en JS
+          moviendo regiones ancladas.
+        </p>
+        <details>
+          <summary>Lo que la hoja dice y lo que es</summary>
+          <ul>
+            <li>
+              Anuncia «16x32 px», pero cada figura está hecha de bloques de 4-5
+              px de pantalla: la rejilla real es de 36-45 × 54-62 px lógicos, y
+              no es uniforme (la celda va de 4,13 a 4,78 px).
+            </li>
+            <li>
+              La muestra «Paleta (ejemplo)» tiene 11 colores (dos naranjas casi
+              iguales); los sprites usan 24.
+            </li>
+            <li>
+              La figura «Izquierda» de la fila 1 mira a la derecha y la
+              «Arriba-Izquierda» mira al frente. Para caminar hacia
+              arriba-izquierda se refleja «Arriba-Derecha».
+            </li>
+            <li>
+              Cada tarjeta muestra el ΔE medio por celda frente a los píxeles
+              originales (5,5-8,2): muy parecido, no idéntico, porque la hoja
+              tiene antialiasado dentro de cada «píxel».
+            </li>
+          </ul>
+        </details>
+      </header>
+      <div id="hoja"></div>
+      <div id="escenario"></div>
+      <div id="reto"></div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

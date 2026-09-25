@@ -1,0 +1,24 @@
+{
+  "name": "sprites",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "La Niña Gatita en pixel art: sprites extraídos de su hoja de referencia y animados en Canvas 2D.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "tsx --test src/nina-gatita/*.test.ts",
+    "extract": "tsx scripts/extract-nina-gatita.ts",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^0.1.100",
+    "@types/node": "^22.20.4",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6"
+  }
+}

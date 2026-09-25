@@ -1,0 +1,370 @@
+/* Piezas de la Niña Gatita. Paneles crema con borde marrón y sombra dura,
+   como la hoja de referencia. Las superficies fijan su tinta: son crema en
+   los dos temas, así que no heredan el texto claro del modo oscuro. */
+.ng {
+  --ng-paper: #f4ede3;
+  --ng-panel: #e9dccb;
+  --ng-line: #cdb9a2;
+  --ng-ink: #3a2a24;
+  --ng-dim: #7a6558;
+  --ng-edge: #5b4338;
+  --ng-accent: #f14260;
+  --ng-ok: #2f8a4f;
+  --ng-bad: #b8302f;
+  --ng-focus: #26b8d0;
+  font-family: var(--font-pixel), "Courier New", monospace;
+  margin: 1.5rem 0;
+  padding: 14px;
+  background: var(--ng-paper);
+  color: var(--ng-ink);
+  border: 3px solid var(--ng-edge);
+  box-shadow: 0 4px 0 var(--ng-edge);
+}
+.ng button,
+.ng input {
+  font: inherit;
+}
+.ng button:focus-visible,
+.ng [tabindex="0"]:focus-visible {
+  outline: 3px solid var(--ng-focus);
+  outline-offset: 2px;
+}
+.ng-eyebrow {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ng-dim);
+}
+.ng-title {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 400;
+}
+.ng-intro {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.ng-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ng-dim);
+}
+.ng-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+/* Diseño en dos columnas que se apila en móvil. */
+.ng-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .ng-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.ng-panel {
+  background: var(--ng-panel);
+  border: 3px solid var(--ng-edge);
+  padding: 10px;
+}
+.ng-panel-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+/* Pantalla del escenario: el lienzo escala con factor entero. */
+.ng-screen {
+  width: 100%;
+  background: var(--ng-edge);
+  outline: none;
+}
+.ng-screen-wrap {
+  border: 3px solid var(--ng-edge);
+  background: var(--ng-edge);
+}
+.ng-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* Rejilla de depuración: una línea por píxel lógico (--px la fija el lienzo). */
+.ng-grid {
+  background-image:
+    linear-gradient(to right, rgba(58, 42, 36, 0.22) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(58, 42, 36, 0.22) 1px, transparent 1px);
+  background-size: calc(var(--px) * 1px) calc(var(--px) * 1px);
+}
+.ng-anchor {
+  position: absolute;
+  border: 1px dashed #0bb3d9;
+}
+.ng-anchor[data-kind="tail"] {
+  border-color: #3d6ad6;
+}
+.ng-anchor[data-kind="kitten"] {
+  border-color: #c03fb0;
+}
+.ng-anchor[data-kind="legs"] {
+  border-color: #d07a1e;
+}
+.ng-anchor-line {
+  position: absolute;
+  height: 0;
+  border-top: 1px dashed #2f8a4f;
+}
+.ng-hit {
+  position: absolute;
+  pointer-events: auto;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Botones: crema con borde marrón y sombra que se hunde al pulsar. */
+.ng-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ng-btn {
+  padding: 5px 10px;
+  font-size: 14px;
+  background: var(--ng-paper);
+  color: var(--ng-ink);
+  border: 3px solid var(--ng-edge);
+  box-shadow: 0 3px 0 var(--ng-edge);
+  cursor: pointer;
+}
+.ng-btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: none;
+}
+.ng-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ng-btn[aria-pressed="true"] {
+  background: var(--ng-edge);
+  color: var(--ng-paper);
+}
+.ng-btn-primary {
+  background: var(--ng-accent);
+  color: #fff;
+}
+
+/* Cruceta de 8 direcciones. */
+.ng-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(3, 44px);
+  gap: 4px;
+  touch-action: none;
+  user-select: none;
+}
+.ng-pad .ng-btn {
+  padding: 0;
+  font-size: 18px;
+  box-shadow: 0 2px 0 var(--ng-edge);
+}
+.ng-pad .ng-btn[data-active="true"] {
+  background: var(--ng-edge);
+  color: var(--ng-paper);
+}
+
+.ng-hud {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ng-hud dt {
+  display: inline;
+  color: var(--ng-dim);
+}
+.ng-hud dd {
+  display: inline;
+  margin: 0 12px 0 4px;
+}
+
+/* Recorte de la hoja original: es una imagen pintada, no pixel art, así
+   que se muestra con su propio suavizado. */
+.ng-ref {
+  background-repeat: no-repeat;
+  flex: none;
+}
+
+/* Hoja: tarjetas con referencia y rejilla lado a lado. */
+.ng-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+}
+.ng-card {
+  background: var(--ng-panel);
+  border: 3px solid var(--ng-edge);
+  padding: 8px;
+}
+.ng-card-pair {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  justify-content: center;
+}
+.ng-card-pair figure {
+  margin: 0;
+  text-align: center;
+}
+.ng-card-pair figcaption {
+  font-size: 11px;
+  color: var(--ng-dim);
+}
+.ng-card h3 {
+  margin: 6px 0 2px;
+  font-size: 15px;
+  font-weight: 400;
+}
+.ng-warn {
+  margin: 4px 0 0;
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  background: #fbe3e3;
+  border: 2px solid var(--ng-bad);
+}
+
+/* Paleta por grupos. */
+.ng-palette {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px 14px;
+}
+.ng-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ng-swatch {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 34px;
+  padding: 3px;
+  background: var(--ng-paper);
+  color: var(--ng-ink);
+  border: 3px solid var(--ng-edge);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ng-swatch[aria-pressed="true"] {
+  border-color: var(--ng-accent);
+  box-shadow: 0 0 0 2px var(--ng-accent);
+}
+.ng-chip {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--ng-edge);
+}
+
+/* Editor del reto. */
+.ng-editor {
+  position: relative;
+  width: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}
+.ng-editor canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+.ng-editbox {
+  position: absolute;
+  pointer-events: none;
+  outline: 2px dashed var(--ng-accent);
+  outline-offset: -1px;
+}
+.ng-checks {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 14px;
+}
+.ng-checks li {
+  margin: 0 0 6px;
+  padding-left: 22px;
+  position: relative;
+  line-height: 1.35;
+}
+.ng-checks li::before {
+  position: absolute;
+  left: 0;
+}
+.ng-checks li[data-ok="true"]::before {
+  content: "✔";
+  color: var(--ng-ok);
+}
+.ng-checks li[data-ok="false"]::before {
+  content: "✘";
+  color: var(--ng-bad);
+}
+.ng-checks small {
+  display: block;
+  color: var(--ng-dim);
+}
+.ng-hint {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  font-size: 14px;
+  line-height: 1.4;
+  background: var(--ng-paper);
+  border: 2px dashed var(--ng-edge);
+}
+.ng-verdict {
+  margin: 8px 0 0;
+  font-size: 15px;
+}
+.ng-verdict[data-ok="true"] {
+  color: var(--ng-ok);
+}
+.ng-verdict[data-ok="false"] {
+  color: var(--ng-bad);
+}
+
+/* Página independiente. */
+:root {
+  --font-pixel: "Pixelify Sans";
+}
+body {
+  margin: 0;
+  background: #e9dccb;
+  color: #3a2a24;
+  font-family: system-ui, sans-serif;
+}
+.page {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  line-height: 1.5;
+}
+.page h1 {
+  font-family: var(--font-pixel), monospace;
+  font-weight: 400;
+  margin: 0 0 8px;
+}
+.page code {
+  font-size: 0.9em;
+}
+.page details {
+  margin: 8px 0 0;
+}
