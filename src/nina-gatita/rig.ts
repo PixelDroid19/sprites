@@ -225,10 +225,12 @@ function buildGirl(id: SpriteId): GirlSprite {
   const crown = ear ? mirrorEar(noKitten.rows, ear) : noKitten.rows;
   const smooth = smoothCrown(crown);
   const center = headCenter(smooth);
-  const eared = sharpenEars(
-    smooth,
-    BACK_EARS[id] ?? withFarEar(findEars(smooth), manual.eyes),
-    center,
+  const eared = smoothCrown(
+    sharpenEars(
+      smooth,
+      BACK_EARS[id] ?? withFarEar(findEars(smooth), manual.eyes),
+      center,
+    ),
   );
   let rows = dryEyes(cleanUnderEyes(eared, manual.eyes), manual.eyes);
   const auto = autoAnchors(rows, manual.tail);

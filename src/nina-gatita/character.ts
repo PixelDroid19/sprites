@@ -469,10 +469,10 @@ export function sharpenEars(
   const w = g[0].length;
   const shapes = ears.map((e) => {
     const inner = e.x1 - e.x0 + 1;
-    const width = Math.min(9, Math.max(7, inner + 3));
+    const width = Math.min(13, Math.max(11, inner + 5));
     const cx = (e.x0 + e.x1) / 2;
     const out = cx < headCenterX ? -1 : 1;
-    const height = Math.ceil(width / 2) + 3;
+    const height = Math.round(width * 0.6);
     const baseY = e.y0 + 1;
     return { e, width, cx, out, baseY, apexY: baseY - height };
   });
@@ -489,7 +489,7 @@ export function sharpenEars(
   for (const { e, width, cx, out, baseY, apexY } of order) {
     for (let y = apexY; y <= baseY; y++) {
       const f = (y - apexY) / (baseY - apexY);
-      const shift = out * Math.round(1 - f);
+      const shift = out * Math.round(2 * (1 - f));
       // La punta es 1 px; debajo ya se abre a 3 (sin palito de 2 filas).
       const half = y === apexY ? 0 : Math.max(1, (f * (width - 1)) / 2);
       const left = Math.round(cx - half) + shift;
@@ -497,7 +497,7 @@ export function sharpenEars(
       for (let x = left; x <= right; x++) {
         if (x < 0 || x >= w) continue;
         const edge = x === left || x === right || y === apexY;
-        const innerCol = x > left + 1 && x < right - 1 && y >= apexY + 2;
+        const innerCol = x > left + 1 && x < right - 1 && y >= apexY + 1;
         g[y][x] = edge
           ? "k"
           : innerCol && !e.back
