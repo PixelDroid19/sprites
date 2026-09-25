@@ -1,23 +1,21 @@
 // Composición de fotogramas: a partir de la rejilla original y una pose se
 // obtiene otra rejilla del mismo tamaño y la misma paleta. Todo son
 // desplazamientos enteros de regiones ancladas; nada se rota ni se escala.
-import { REFERENCE_SPRITES } from "./sprites.generated";
-import { RIGS, inBox, type EyeAnchor, type Rig, type SpriteId } from "./rig";
+import { GIRL, inBox, type EyeAnchor, type Rig, type SpriteId } from "./rig";
 
 export type EyeState = "open" | "closed" | "happy";
 export type LiftedLeg = "none" | "left" | "right";
 
 export interface Pose {
-  // Cabeza, pelo y gatito bajan 1 px (respiración).
+  // La cabeza baja 1 px (respiración, o retraso del pelo tras un paso).
   headDrop: boolean;
-  // Todo lo que está sobre las piernas baja 1 px (paso, aterrizaje).
+  // Todo lo que está sobre las piernas baja 1 px (paso, aterrizaje). Se
+  // suma a headDrop: con los dos, la cabeza queda 2 px abajo.
   bodyDrop: boolean;
   // Pierna levantada 1 px (lado de la imagen).
   leg: LiftedLeg;
   // Desplazamiento vertical de la punta de la cola, en px con signo.
   tail: number;
-  // Desplazamiento horizontal de la punta de la cola del gatito.
-  kittenTail: number;
   eyes: EyeState;
 }
 
@@ -26,13 +24,12 @@ export const REST_POSE: Pose = {
   bodyDrop: false,
   leg: "none",
   tail: 0,
-  kittenTail: 0,
   eyes: "open",
 };
 
 // Píxeles que sustituyen a un ojo concreto (el reto del parpadeo).
 export type EyeOverride = (
-  id: SpriteId,
+  id: string,
   eyeIndex: number,
   rig: Rig,
 ) => string[] | null;
@@ -90,12 +87,21 @@ function moveRegion(
     if (y >= 0 && y < g.length && x >= 0 && x < g[0].length) g[y][x] = ch;
 }
 
-// Cizalla por columnas: cada columna de la cola se mueve en vertical en
+// Cola: cada columna (o fila, si la raíz está abajo) se mueve en
 // proporción a su distancia a la raíz. Con amplitud 1 sale un escalón de
-// 1 px limpio; la columna de la raíz nunca se mueve.
+// 1 px limpio; la raíz nunca se mueve.
 function swayTail(g: Grid, rig: Rig, amount: number) {
   if (!amount) return;
   const t = rig.tail;
+  if (t.root === "bottom") {
+    const rootY = t.y1 + 1;
+    moveRegion(
+      g,
+      (x, y) => inBox(t, x, y),
+      (_, y) => [roundSym((amount * (rootY - y)) / (rootY - t.y0)), 0],
+    );
+    return;
+  }
   const len = t.x1 - t.x0 + 1;
   moveRegion(
     g,
@@ -107,15 +113,12 @@ function swayTail(g: Grid, rig: Rig, amount: number) {
   );
 }
 
-// La cola del gatito se mueve por filas: la punta (arriba) es la que más.
-function swayKittenTail(g: Grid, rig: Rig, amount: number) {
-  if (!amount) return;
-  const k = rig.kittenTail;
-  const rootY = k.y1 + 1;
-  moveRegion(
-    g,
-    (x, y) => inBox(k, x, y),
-    (_, y) => [roundSym((amount * (rootY - y)) / (rootY - k.y0)), 0],
+// Pinta una capa encima (solo sus píxeles opacos).
+function overlay(g: Grid, layer: Grid) {
+  layer.forEach((row, y) =>
+    row.forEach((ch, x) => {
+      if (ch !== EMPTY) g[y][x] = ch;
+    }),
   );
 }
 
@@ -124,12 +127,12 @@ function swayKittenTail(g: Grid, rig: Rig, amount: number) {
 export function closedEye(e: EyeAnchor): string[] {
   const w = e.x1 - e.x0 + 1;
   const h = e.y1 - e.y0 + 1;
-  const rows = Array.from({ length: h }, () => Array<string>(w).fill("s"));
+  const rows = Array.from({ length: h }, () => Array<string>(w).fill(e.fill ?? "s"));
   const lid = h - 3;
   const outer = e.outer === "left" ? 0 : w - 1;
   for (let x = 0; x < w; x++) rows[x === outer ? lid + 1 : lid][x] = "k";
   // Sombra de piel bajo el párpado: da volumen al ojo cerrado.
-  for (let x = 1; x < w - 1; x++) if (x !== outer) rows[lid + 1][x] = "S";
+  for (let x = 1; x < w - 1; x++) if (x !== outer) rows[lid + 1][x] = e.shade ?? "S";
   return rows.map((r) => r.join(""));
 }
 
@@ -137,7 +140,7 @@ export function closedEye(e: EyeAnchor): string[] {
 export function happyEye(e: EyeAnchor): string[] {
   const w = e.x1 - e.x0 + 1;
   const h = e.y1 - e.y0 + 1;
-  const rows = Array.from({ length: h }, () => Array<string>(w).fill("s"));
+  const rows = Array.from({ length: h }, () => Array<string>(w).fill(e.fill ?? "s"));
   const top = h - 4;
   for (let x = 0; x < w; x++) {
     const edge = x === 0 || x === w - 1;
@@ -148,7 +151,7 @@ export function happyEye(e: EyeAnchor): string[] {
 
 function paintEyes(
   g: Grid,
-  id: SpriteId,
+  id: string,
   rig: Rig,
   pose: Pose,
   override?: EyeOverride,
@@ -186,25 +189,40 @@ function dropAbove(g: Grid, rowLimit: number) {
 }
 
 export function poseKey(p: Pose): string {
-  return `${+p.headDrop}${+p.bodyDrop}${p.leg[0]}${p.tail}:${p.kittenTail}${p.eyes[0]}`;
+  return `${+p.headDrop}${+p.bodyDrop}${p.leg[0]}${p.tail}${p.eyes[0]}`;
 }
 
-// Fotograma compuesto. El orden importa: primero las partes pequeñas
-// (colas, ojos, pierna) sobre la figura en reposo y al final los
-// desplazamientos grandes, que arrastran esas partes ya colocadas.
+// Fotograma compuesto de cualquier personaje con su rig. El orden importa:
+// primero las partes pequeñas (cola, ojos, pierna) sobre la figura en
+// reposo y al final los desplazamientos grandes, que las arrastran.
+export function composeRows(
+  id: string,
+  rows: readonly string[],
+  rig: Rig,
+  pose: Pose,
+  override?: EyeOverride,
+): string[] {
+  const g = toGrid(rows);
+  if (rig.tailLayer) {
+    // Cola en capa propia: se balancea sola y se pinta encima del cuerpo.
+    const layer = toGrid(rig.tailLayer);
+    swayTail(layer, rig, pose.tail);
+    overlay(g, layer);
+  } else {
+    swayTail(g, rig, pose.tail);
+  }
+  paintEyes(g, id, rig, pose, override);
+  liftLeg(g, rig, pose.leg);
+  if (pose.bodyDrop) dropAbove(g, rig.hipY);
+  if (pose.headDrop) dropAbove(g, rig.neckY + (pose.bodyDrop ? 1 : 0));
+  closeOutline(g);
+  return g.map((row) => row.join(""));
+}
+
 export function composeFrame(
   id: SpriteId,
   pose: Pose,
   override?: EyeOverride,
 ): string[] {
-  const rig = RIGS[id];
-  const g = toGrid(REFERENCE_SPRITES[id].rows);
-  swayTail(g, rig, pose.tail);
-  swayKittenTail(g, rig, pose.kittenTail);
-  paintEyes(g, id, rig, pose, override);
-  liftLeg(g, rig, pose.leg);
-  if (pose.bodyDrop) dropAbove(g, rig.hipY);
-  else if (pose.headDrop) dropAbove(g, rig.neckY);
-  closeOutline(g);
-  return g.map((row) => row.join(""));
+  return composeRows(id, GIRL[id].rows, GIRL[id].rig, pose, override);
 }

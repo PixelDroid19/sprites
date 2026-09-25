@@ -1,6 +1,7 @@
 // Anclajes de cada figura: dónde están el cuello, la cadera, las piernas,
 // los ojos y las colas. La animación nunca mueve píxeles sueltos: mueve
 // regiones definidas desde estos anclajes, así las partes siguen unidas.
+import { cleanUnderEyes, removeKitten, tailFromBack } from "./character";
 import { REFERENCE_SPRITES } from "./sprites.generated";
 import type { Facing } from "./types";
 
@@ -19,17 +20,22 @@ export interface Box {
 export interface EyeAnchor extends Box {
   // Lado del rabillo exterior del ojo (hacia la oreja).
   outer: "left" | "right";
+  // Color del párpado cerrado y de su sombra (piel en la niña, pelaje en
+  // el gatito).
+  fill?: string;
+  shade?: string;
 }
 
 export interface TailAnchor extends Box {
   // Lado por el que la cola se une al cuerpo: esa columna no se mueve.
-  root: "left" | "right";
+  // "bottom": cola vertical (la del gatito), se mueve por filas.
+  root: "left" | "right" | "bottom";
 }
 
 export interface Rig {
   width: number;
   height: number;
-  // Primera fila del torso: lo que queda encima es cabeza, pelo y gatito.
+  // Primera fila del torso: lo que queda encima es la cabeza.
   neckY: number;
   // Primera fila de las piernas, justo bajo la falda.
   hipY: number;
@@ -40,14 +46,16 @@ export interface Rig {
   legSplitX: number;
   eyes: EyeAnchor[];
   tail: TailAnchor;
-  // Punta libre de la cola del gatito; la fila de debajo es su raíz.
-  kittenTail: Box;
+  // Cola en capa propia, pintada encima del cuerpo (vistas de espalda).
+  tailLayer?: readonly string[];
+  // Dónde se sienta el gatito: centro de la coronilla.
+  seat: { x: number; y: number };
 }
 
 export const inBox = (b: Box, x: number, y: number) =>
   x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
 
-type ManualAnchors = Pick<Rig, "eyes" | "tail" | "kittenTail">;
+type ManualAnchors = Pick<Rig, "eyes" | "tail">;
 
 const box = (x0: number, y0: number, x1: number, y1: number): Box => ({
   x0,
@@ -77,47 +85,38 @@ const MANUAL: Record<SpriteId, ManualAnchors> = {
   abajoIzquierda: {
     eyes: [eye(7, 27, 11, 33, "left"), eye(19, 27, 24, 33, "right")],
     tail: tail(36, 32, 44, 44, "left"),
-    kittenTail: box(23, 0, 29, 5),
   },
   abajo: {
     eyes: [eye(12, 29, 18, 36, "left"), eye(26, 29, 31, 36, "right")],
     tail: tail(37, 35, 44, 47, "left"),
-    kittenTail: box(28, 0, 35, 3),
   },
   abajoDerecha: {
     eyes: [eye(17, 30, 22, 37, "left"), eye(29, 29, 33, 36, "right")],
     tail: tail(0, 38, 11, 51, "right"),
-    kittenTail: box(13, 0, 19, 5),
   },
   izquierdaFila1: {
     eyes: [eye(20, 30, 24, 35, "left")],
     tail: tail(0, 40, 9, 53, "right"),
-    kittenTail: box(9, 0, 16, 5),
   },
   derecha: {
     eyes: [eye(26, 27, 29, 31, "left")],
     tail: tail(0, 37, 11, 54, "right"),
-    kittenTail: box(8, 4, 13, 8),
   },
   arribaIzquierda: {
     eyes: [eye(14, 27, 19, 33, "left"), eye(26, 27, 32, 33, "right")],
     tail: tail(0, 37, 9, 51, "right"),
-    kittenTail: box(10, 0, 16, 5),
   },
   arriba: {
     eyes: [],
     tail: tail(33, 43, 40, 57, "left"),
-    kittenTail: box(26, 2, 32, 6),
   },
   arribaDerecha: {
     eyes: [],
     tail: tail(0, 42, 11, 56, "right"),
-    kittenTail: box(25, 0, 30, 4),
   },
   izquierda: {
     eyes: [eye(8, 28, 11, 34, "right")],
     tail: tail(29, 43, 35, 57, "left"),
-    kittenTail: box(19, 1, 25, 4),
   },
 };
 
@@ -154,17 +153,49 @@ function autoAnchors(rows: readonly string[], tailBox: Box) {
   };
 }
 
-export const RIGS = Object.fromEntries(
-  SPRITE_IDS.map((id) => {
-    const rows = REFERENCE_SPRITES[id].rows;
-    const rig: Rig = {
+// Vistas de espalda: la cola sale del centro de la espalda, no de un lado.
+const TAIL_FROM_BACK: SpriteId[] = ["arriba", "arribaDerecha"];
+
+interface GirlSprite {
+  rows: readonly string[];
+  rig: Rig;
+}
+
+// Figura corregida (sin gatito, sin marcas bajo los ojos, cola de espalda
+// en su sitio) y sus anclajes. Las correcciones viven en character.ts.
+function buildGirl(id: SpriteId): GirlSprite {
+  const manual = MANUAL[id];
+  const noKitten = removeKitten(REFERENCE_SPRITES[id].rows);
+  let rows = cleanUnderEyes(noKitten.rows, manual.eyes);
+  const auto = autoAnchors(rows, manual.tail);
+  let tail = manual.tail;
+  let tailLayer: string[] | undefined;
+  if (TAIL_FROM_BACK.includes(id)) {
+    const moved = tailFromBack(rows, manual.tail, auto.legSplitX);
+    rows = moved.rows;
+    tail = moved.tail;
+    tailLayer = moved.layer;
+  }
+  return {
+    rows,
+    rig: {
       width: rows[0].length,
       height: rows.length,
-      ...autoAnchors(rows, MANUAL[id].tail),
-      ...MANUAL[id],
-    };
-    return [id, rig];
-  }),
+      ...auto,
+      eyes: manual.eyes,
+      tail,
+      tailLayer,
+      seat: noKitten.seat,
+    },
+  };
+}
+
+export const GIRL = Object.fromEntries(
+  SPRITE_IDS.map((id) => [id, buildGirl(id)]),
+) as Record<SpriteId, GirlSprite>;
+
+export const RIGS = Object.fromEntries(
+  SPRITE_IDS.map((id) => [id, GIRL[id].rig]),
 ) as Record<SpriteId, Rig>;
 
 // Qué figura se usa para cada dirección al caminar. La hoja no trae una

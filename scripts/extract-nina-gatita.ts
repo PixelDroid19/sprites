@@ -85,6 +85,16 @@ const HEART_BUBBLE = {
   ] as [number, number, PaletteKey][],
 } as const;
 
+// Poses del panel "Gatito (solo)": el gatito como personaje independiente.
+// También están sobre el beige opaco del panel.
+const KITTEN_CELLS = {
+  frente: [1212, 535, 1289, 624],
+  tresCuartos: [1326, 536, 1399, 622],
+  lado: [1416, 536, 1496, 621],
+  espalda: [1242, 644, 1333, 749],
+  espaldaTresCuartos: [1377, 643, 1465, 741],
+} as const;
+
 // Correcciones manuales [x, y, color] sobre la rejilla ya extraída, cada
 // una revisada contra su celda en la hoja. Solo donde la referencia dibuja
 // un detalle más pequeño que una celda y la mediana lo pierde o lo mezcla:
@@ -640,6 +650,12 @@ async function main() {
   );
   debug.heartBubble = bubble.cuts;
   report("heartBubble", bubble);
+  const kittens = Object.entries(KITTEN_CELLS).map(([id, box]) => {
+    const e = extract(data, image.width, box, [], HEART_BUBBLE.background);
+    debug[`gatito-${id}`] = e.cuts;
+    report(`gatito ${id}`, e);
+    return [id, e.rows] as const;
+  });
 
   const body = Object.entries(out)
     .map(([id, sprite]) => {
@@ -669,6 +685,11 @@ ${body}
 export const HEART_BUBBLE: readonly string[] = [
 ${bubble.rows.map((r) => `  "${r}",`).join("\n")}
 ];
+
+// Poses del panel "Gatito (solo)", tal cual salen de la hoja.
+export const KITTEN_REFERENCE = {
+${kittens.map(([id, rows]) => `  ${id}: [\n${rows.map((r) => `    "${r}",`).join("\n")}\n  ],`).join("\n")}
+} as const satisfies Record<string, readonly string[]>;
 `;
   // Se formatea con Prettier para que regenerar no deje diferencias de estilo.
   writeFileSync(OUT, await format(source, { parser: "typescript" }));

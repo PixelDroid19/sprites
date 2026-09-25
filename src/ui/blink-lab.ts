@@ -15,8 +15,7 @@ import {
 import { PALETTE } from "../nina-gatita/palette";
 import type { EyeOverride } from "../nina-gatita/pose";
 import { drawCharacter, drawShadow, paintRows } from "../nina-gatita/render";
-import { RIGS } from "../nina-gatita/rig";
-import { REFERENCE_SPRITES } from "../nina-gatita/sprites.generated";
+import { GIRL, RIGS } from "../nina-gatita/rig";
 import { h, prefersReducedMotion } from "./dom";
 import { createPixelScreen } from "./pixel-screen";
 
@@ -35,7 +34,7 @@ const cloneEyes = (eyes: EyePixels[]) =>
 
 // Cara del sprite con los ojos del alumno encima, en coordenadas del recorte.
 function faceRows(eyes: EyePixels[]): string[] {
-  const rows = REFERENCE_SPRITES[EXERCISE_SPRITE].rows
+  const rows = GIRL[EXERCISE_SPRITE].rows
     .slice(FACE_CROP.y0, FACE_CROP.y1 + 1)
     .map((row) => [...row.slice(FACE_CROP.x0, FACE_CROP.x1 + 1)]);
   EXERCISE_EYES.forEach((e, i) =>

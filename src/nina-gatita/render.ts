@@ -3,8 +3,9 @@
 // rasterizan una vez y se cachean como superficies.
 import { createSurface, type Ctx, type Surface } from "../engine/surface";
 import { PALETTE, SCENE, isPaletteKey } from "./palette";
-import { composeFrame, poseKey, type EyeOverride, type Pose } from "./pose";
-import { RIGS, type SpriteId } from "./rig";
+import { composeRows, poseKey, type EyeOverride, type Pose } from "./pose";
+import { KITTEN, type KittenView } from "./kitten";
+import { GIRL, type Rig, type SpriteId } from "./rig";
 import { HEART_BUBBLE } from "./sprites.generated";
 
 export type ViewMode = "color" | "silhouette" | "grayscale";
@@ -62,20 +63,31 @@ function remember<T>(cache: Map<string, T>, key: string, make: () => T): T {
 // de la función que los aporta (cambia en cada "Ejecutar").
 const overrideCache = new WeakMap<EyeOverride, Map<string, Surface>>();
 
+// Todo lo que se puede pintar: las figuras de la niña por su id y las del
+// gatito como "gatito:<vista>". Los dos usan el mismo sistema de poses.
+export type ActorId = SpriteId | `gatito:${KittenView}`;
+
+export function actor(id: ActorId): { rows: readonly string[]; rig: Rig } {
+  return id.startsWith("gatito:")
+    ? KITTEN[id.slice(7) as KittenView]
+    : GIRL[id as SpriteId];
+}
+
 export function getFrame(
-  id: SpriteId,
+  id: ActorId,
   pose: Pose,
   override?: EyeOverride,
 ): string[] {
+  const { rows, rig } = actor(id);
   if (override && pose.eyes === "closed")
-    return composeFrame(id, pose, override);
+    return composeRows(id, rows, rig, pose, override);
   return remember(frameCache, `${id}|${poseKey(pose)}`, () =>
-    composeFrame(id, pose),
+    composeRows(id, rows, rig, pose),
   );
 }
 
 function frameSurface(
-  id: SpriteId,
+  id: ActorId,
   pose: Pose,
   mode: ViewMode,
   override?: EyeOverride,
@@ -96,7 +108,7 @@ function frameSurface(
 }
 
 export interface CharacterDraw {
-  sprite: SpriteId;
+  sprite: ActorId;
   flip: boolean;
   pose: Pose;
   // Punto de apoyo: centro entre los pies, sobre la línea del suelo.
@@ -112,7 +124,7 @@ export interface CharacterDraw {
 export function spriteOrigin(
   d: Pick<CharacterDraw, "sprite" | "flip" | "x" | "y" | "lift">,
 ) {
-  const rig = RIGS[d.sprite];
+  const { rig } = actor(d.sprite);
   const anchorX = d.flip ? rig.width - rig.legSplitX : rig.legSplitX;
   return {
     x: Math.round(d.x) - anchorX,

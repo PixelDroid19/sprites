@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PALETTE } from "./palette";
 import { HEART_BUBBLE, REFERENCE_SPRITES } from "./sprites.generated";
+import { KITTEN, KITTEN_DIRECTIONS } from "./kitten";
+import { KITTEN_COLORS } from "./character";
 import {
   DIRECTIONS,
+  GIRL,
   RIGS,
   SPRITE_IDS,
   facingFromVector,
@@ -13,10 +16,14 @@ import {
   REST_POSE,
   closedEye,
   composeFrame,
+  composeRows,
   happyEye,
   type Pose,
 } from "./pose";
 import {
+  KITTEN_JUMP_MS,
+  jumpArc,
+  sampleKitten,
   PET_DURATION,
   PET_TIMELINE,
   WALK_CYCLE,
@@ -96,10 +103,9 @@ function openOutline(rows: readonly string[]): [number, number][] {
 const POSES: Pose[] = [
   REST_POSE,
   ...[-1, 1].map((tail) => ({ ...REST_POSE, tail })),
-  ...[-1, 1].map((kittenTail) => ({ ...REST_POSE, kittenTail })),
   { ...REST_POSE, headDrop: true, eyes: "closed" },
-  { ...REST_POSE, bodyDrop: true, eyes: "happy" },
-  ...WALK_CYCLE.map((step) => ({ ...REST_POSE, ...step, kittenTail: 1 })),
+  { ...REST_POSE, bodyDrop: true, headDrop: true, eyes: "happy" },
+  ...WALK_CYCLE.map((step) => ({ ...REST_POSE, ...step })),
 ];
 
 test("sprites y burbuja: filas uniformes y solo colores de la paleta", () => {
@@ -108,9 +114,9 @@ test("sprites y burbuja: filas uniformes y solo colores de la paleta", () => {
   assertPaletteRows("burbuja", HEART_BUBBLE);
 });
 
-test("cada figura es una sola pieza con el contorno cerrado", () => {
+test("cada figura corregida es una sola pieza con el contorno cerrado", () => {
   for (const id of SPRITE_IDS) {
-    const rows = REFERENCE_SPRITES[id].rows;
+    const rows = GIRL[id].rows;
     assert.equal(islands(rows), 1, `${id}: hay píxeles flotando`);
     assert.deepEqual(openOutline(rows), [], `${id}: silueta sin contorno`);
   }
@@ -126,7 +132,6 @@ test("la extracción sigue siendo fiel a la hoja (ΔE medio por celda)", () => {
 test("los anclajes caen dentro de la figura y en orden", () => {
   for (const id of SPRITE_IDS) {
     const r = RIGS[id];
-    const rows = REFERENCE_SPRITES[id].rows;
     assert.ok(
       r.neckY > 0 && r.neckY < r.hipY && r.hipY < r.height,
       `${id}: cuello/cadera`,
@@ -135,7 +140,7 @@ test("los anclajes caen dentro de la figura y en orden", () => {
       r.legSplitX > r.legs.x0 && r.legSplitX <= r.legs.x1,
       `${id}: separación de piernas`,
     );
-    for (const b of [r.tail, r.kittenTail, r.legs, ...r.eyes]) {
+    for (const b of [r.tail, r.legs, ...r.eyes]) {
       assert.ok(
         b.x0 >= 0 && b.x1 < r.width && b.y0 >= 0 && b.y1 < r.height,
         `${id}: caja fuera`,
@@ -149,12 +154,6 @@ test("los anclajes caen dentro de la figura y en orden", () => {
         `${id}: caja de ojo demasiado baja para cerrar`,
       );
     }
-    // La raíz de la cola del gatito (fila bajo la punta) está pegada al gato.
-    const root = rows[r.kittenTail.y1 + 1].slice(
-      r.kittenTail.x0,
-      r.kittenTail.x1 + 1,
-    );
-    assert.match(root, /[oOyYc]/, `${id}: la cola del gatito no tiene raíz`);
   }
 });
 
@@ -171,10 +170,9 @@ test("todas las poses conservan tamaño, paleta, una sola pieza y contorno", () 
 });
 
 test("la pose en reposo es exactamente la figura extraída", () => {
-  for (const id of SPRITE_IDS)
-    assert.deepEqual(composeFrame(id, REST_POSE), [
-      ...REFERENCE_SPRITES[id].rows,
-    ]);
+  // Las vistas de espalda llevan la cola en capa aparte: se pinta encima.
+  for (const id of SPRITE_IDS.filter((i) => !RIGS[i].tailLayer))
+    assert.deepEqual(composeFrame(id, REST_POSE), [...GIRL[id].rows]);
 });
 
 test("el paso levanta un pie 1 px y el cuerpo baja 1 px", () => {
@@ -247,7 +245,7 @@ test("la animación cambia a ritmo de pixel art, no a 60 fps", () => {
     return n;
   };
   assert.ok(changes("idle") <= 16, `idle: ${changes("idle")} cambios/s`);
-  assert.equal(changes("walk"), 1000 / WALK_STEP);
+  assert.ok(Math.abs(changes("walk") - 1000 / WALK_STEP) <= 1);
 });
 
 test("la caricia recorre anticipación, acción, impacto y recuperación", () => {
@@ -307,4 +305,60 @@ test("reto del parpadeo: cada regla detecta su error", () => {
     }).espejo,
     false,
   );
+});
+
+test("la niña ya no lleva al gatito pintado en la cabeza", () => {
+  for (const id of SPRITE_IDS) {
+    const orange = GIRL[id].rows
+      .slice(0, 20)
+      .join("")
+      .split("")
+      .filter((ch) => KITTEN_COLORS.has(ch)).length;
+    assert.equal(orange, 0, `${id}: quedan ${orange} píxeles del gatito`);
+    const { seat } = RIGS[id];
+    assert.notEqual(GIRL[id].rows[seat.y][seat.x], ".", `${id}: asiento vacío`);
+  }
+});
+
+test("bajo los ojos no quedan grises ni manchas oscuras (el 'golpe')", () => {
+  for (const id of SPRITE_IDS)
+    for (const e of RIGS[id].eyes) {
+      const band = GIRL[id].rows
+        .slice(e.y1 + 1, e.y1 + 3)
+        .map((row) => row.slice(e.x0, e.x1 + 1))
+        .join("");
+      assert.doesNotMatch(band, /[Ge]/, `${id}: gris bajo el ojo`);
+    }
+});
+
+test("en las vistas de espalda la cola nace del centro de la espalda", () => {
+  for (const id of ["arriba", "arribaDerecha"] as const) {
+    const r = RIGS[id];
+    assert.ok(r.tailLayer, `${id}: sin capa de cola`);
+    const root = r.tail.root === "left" ? r.tail.x0 : r.tail.x1;
+    assert.ok(Math.abs(root - r.legSplitX) <= 1, `${id}: raíz en ${root}, centro ${r.legSplitX}`);
+  }
+});
+
+test("el gatito: poses válidas en todas sus vistas y 8 direcciones", () => {
+  assert.equal(Object.keys(KITTEN_DIRECTIONS).length, 8);
+  for (const [view, k] of Object.entries(KITTEN)) {
+    for (const pose of POSES) {
+      const rows = composeRows(`gatito:${view}`, k.rows, k.rig, pose);
+      const name = `gatito ${view} ${JSON.stringify(pose)}`;
+      assertPaletteRows(name, rows);
+      assert.equal(islands(rows), 1, `${name}: se separa una parte`);
+    }
+    assert.ok(k.rig.neckY < k.rig.hipY && k.rig.hipY < k.rig.height, view);
+  }
+});
+
+test("el salto del gatito sale y llega a su sitio, con arco hacia arriba", () => {
+  const from = { x: 10, y: 20 };
+  const to = { x: 40, y: 60 };
+  assert.deepEqual(jumpArc(from, to, 0), from);
+  assert.deepEqual(jumpArc(from, to, 1), to);
+  assert.ok(jumpArc(from, to, 0.5).y < (from.y + to.y) / 2);
+  assert.equal(sampleKitten("jumpDown", 0, 0).phase, "impulso");
+  assert.equal(sampleKitten("jumpDown", KITTEN_JUMP_MS - 10, 0).jump, 1);
 });

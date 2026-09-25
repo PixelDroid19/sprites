@@ -3,8 +3,7 @@
 // coherencia entre ojos), no una comparación píxel a píxel: hay más de un
 // parpadeo correcto.
 import { closedEye } from "./pose";
-import { RIGS, type EyeAnchor } from "./rig";
-import { REFERENCE_SPRITES } from "./sprites.generated";
+import { GIRL, RIGS, type EyeAnchor } from "./rig";
 
 export const EXERCISE_SPRITE = "abajo" as const;
 export const EXERCISE_EYES: readonly EyeAnchor[] = RIGS[EXERCISE_SPRITE].eyes;
@@ -37,7 +36,7 @@ const LID = new Set(["k", "K"]);
 export type EyePixels = string[][];
 
 export function openEyes(): EyePixels[] {
-  const rows = REFERENCE_SPRITES[EXERCISE_SPRITE].rows;
+  const rows = GIRL[EXERCISE_SPRITE].rows;
   return EXERCISE_EYES.map((e) =>
     rows.slice(e.y0, e.y1 + 1).map((row) => [...row.slice(e.x0, e.x1 + 1)]),
   );

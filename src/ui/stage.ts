@@ -1,6 +1,16 @@
 // Escenario jugable: la Niña Gatita camina en 8 direcciones y se acaricia.
 import type { Ctx } from "../engine/surface";
-import { PET_DURATION, sample, type AnimState } from "../nina-gatita/animation";
+import {
+  KITTEN_JUMP_MS,
+  PET_DURATION,
+  jumpArc,
+  sample,
+  sampleKitten,
+  type AnimState,
+  type KittenState,
+} from "../nina-gatita/animation";
+import { KITTEN_DIRECTIONS } from "../nina-gatita/kitten";
+import type { Pose } from "../nina-gatita/pose";
 import {
   BUBBLE_H,
   BUBBLE_W,
@@ -25,13 +35,15 @@ import { createPixelScreen } from "./pixel-screen";
 import { referenceCrop, updateReferenceCrop } from "./reference-crop";
 
 export const STAGE_W = 160;
-export const STAGE_H = 112;
+export const STAGE_H = 136;
 // Zona por la que puede andar el punto de apoyo (entre los pies): deja
 // sitio arriba para la figura más alta (62 px) y su burbuja.
-const WALK_AREA = { x0: 22, x1: 138, y0: 72, y1: 108 };
+const WALK_AREA = { x0: 22, x1: 138, y0: 94, y1: 132 };
 // Velocidad en px lógicos por segundo; la posición se redondea al pintar.
 const SPEED = 40;
 const SHADOW_RX = 11;
+// Velocidad del gatito en el suelo (algo más rápido que la niña).
+const KITTEN_SPEED = 46;
 // Un "paso" manual en pausa avanza un fotograma de la caminata.
 const STEP_MS = 125;
 
@@ -98,7 +110,6 @@ function anchorLayer(rig: Rig): HTMLElement[] {
   return [
     ...rig.eyes.map((e) => anchorBox(e, rig, "eye")),
     anchorBox(rig.tail, rig, "tail"),
-    anchorBox(rig.kittenTail, rig, "kitten"),
     anchorBox(rig.legs, rig, "legs"),
     h("span", {
       className: "ng-anchor-line",
@@ -116,7 +127,7 @@ export function createStage(): HTMLElement {
   const view = { mode: "color" as ViewMode, slow: false, anchors: false };
   const sim = {
     x: 80,
-    y: 96,
+    y: 116,
     facing: "abajo" as Facing,
     state: "idle" as AnimState,
     stateStart: 0,
@@ -170,6 +181,94 @@ export function createStage(): HTMLElement {
         : "");
   };
 
+  // Gatito: en la cabeza, saltando o en el suelo siguiendo a la niña.
+  const kitten = {
+    state: "head" as KittenState,
+    start: 0,
+    x: 0,
+    y: 0,
+    facing: "abajo" as Facing,
+    from: { x: 0, y: 0 },
+    to: { x: 0, y: 0 },
+  };
+  const setKitten = (state: KittenState) => {
+    kitten.state = state;
+    kitten.start = sim.clock;
+  };
+  // Pide saltar: desde la cabeza al suelo, o desde el suelo a la cabeza.
+  const toggleKitten = () => {
+    if (kitten.state === "head") {
+      kitten.from = { ...lastSeat };
+      const side = sim.facing.includes("izquierda") ? 1 : -1;
+      kitten.to = {
+        x: clamp(sim.x + side * 18, WALK_AREA.x0, WALK_AREA.x1),
+        y: clamp(sim.y + 2, WALK_AREA.y0, WALK_AREA.y1),
+      };
+      kitten.facing = side > 0 ? "derecha" : "izquierda";
+      setKitten("jumpDown");
+    } else if (kitten.state === "idle" || kitten.state === "walk") {
+      kitten.from = { x: kitten.x, y: kitten.y };
+      setKitten("jumpUp");
+    }
+    kittenBtn.textContent =
+      kitten.state === "jumpDown" ? "Gatito: subir (G)" : "Gatito: bajar (G)";
+  };
+  let lastSeat = { x: 0, y: 0 };
+
+  // Avanza al gatito y devuelve cómo pintarlo este fotograma.
+  const stepKitten = (dt: number, seat: { x: number; y: number }) => {
+    lastSeat = seat;
+    const inState = sim.clock - kitten.start;
+    if (kitten.state === "jumpDown" || kitten.state === "jumpUp") {
+      const to = kitten.state === "jumpUp" ? seat : kitten.to;
+      const s = sampleKitten(kitten.state, inState, sim.clock, reduced);
+      const p = jumpArc(kitten.from, to, s.jump ?? 0);
+      kitten.x = p.x;
+      kitten.y = p.y;
+      if (inState >= KITTEN_JUMP_MS)
+        setKitten(kitten.state === "jumpUp" ? "head" : "idle");
+      return kittenDraw(kitten.facing, s.pose, p.x, p.y);
+    }
+    if (kitten.state === "head") {
+      kitten.x = seat.x;
+      kitten.y = seat.y;
+      kitten.facing = sim.facing;
+      const s = sampleKitten("head", inState, sim.clock, reduced);
+      return kittenDraw(sim.facing, s.pose, seat.x, seat.y);
+    }
+    // En el suelo: se queda a un lado de la niña, un poco detrás.
+    const side = kitten.x < sim.x ? -1 : 1;
+    const tx = clamp(sim.x + side * 18, WALK_AREA.x0, WALK_AREA.x1);
+    const ty = clamp(sim.y - 3, WALK_AREA.y0, WALK_AREA.y1);
+    const dx = tx - kitten.x;
+    const dy = ty - kitten.y;
+    const dist = Math.hypot(dx, dy);
+    const walking = dist > (kitten.state === "walk" ? 2 : 8);
+    if (walking !== (kitten.state === "walk"))
+      setKitten(walking ? "walk" : "idle");
+    if (walking) {
+      const step = Math.min(dist, (KITTEN_SPEED * dt) / 1000);
+      kitten.x += (dx / dist) * step;
+      kitten.y += (dy / dist) * step;
+      kitten.facing = facingFromVector(Math.round(dx), Math.round(dy)) ?? kitten.facing;
+    } else {
+      // Quieto, mira hacia la niña.
+      kitten.facing = sim.x > kitten.x ? "derecha" : "izquierda";
+    }
+    const s = sampleKitten(kitten.state, sim.clock - kitten.start, sim.clock, reduced);
+    return kittenDraw(kitten.facing, s.pose, kitten.x, kitten.y);
+  };
+  const kittenDraw = (facing: Facing, pose: Pose, kx: number, ky: number) => {
+    const d = KITTEN_DIRECTIONS[facing];
+    return {
+      sprite: `gatito:${d.view}` as const,
+      flip: d.flip,
+      pose,
+      x: Math.round(kx),
+      y: Math.round(ky),
+    };
+  };
+
   const render = (ctx: Ctx, ms: number) => {
     const dt =
       sim.last < 0 ? 0 : clamp(ms - sim.last, 0, 100) * (view.slow ? 0.25 : 1);
@@ -207,17 +306,6 @@ export function createStage(): HTMLElement {
     const x = Math.round(sim.x);
     const y = Math.round(sim.y);
 
-    drawFloor(ctx, STAGE_W, STAGE_H);
-    if (view.mode === "color") drawShadow(ctx, x, y - 1, SHADOW_RX);
-    drawCharacter(ctx, {
-      sprite: dir.sprite,
-      flip: dir.flip,
-      pose: anim.pose,
-      x,
-      y,
-      lift: anim.lift,
-      mode: view.mode,
-    });
     const origin = spriteOrigin({
       sprite: dir.sprite,
       flip: dir.flip,
@@ -225,6 +313,47 @@ export function createStage(): HTMLElement {
       y,
       lift: anim.lift,
     });
+    // Asiento del gatito en la coronilla: sigue a la cabeza cuando baja
+    // (respiración, pasos) y hunde 2 px las patas en el pelo.
+    const seatX = dir.flip ? rig.width - 1 - rig.seat.x : rig.seat.x;
+    const seat = {
+      x: origin.x + seatX,
+      y:
+        origin.y +
+        rig.seat.y +
+        2 +
+        (anim.pose.bodyDrop ? 1 : 0) +
+        (anim.pose.headDrop ? 1 : 0),
+    };
+    const k = stepKitten(dt, seat);
+
+    drawFloor(ctx, STAGE_W, STAGE_H);
+    const girl = () => {
+      if (view.mode === "color") drawShadow(ctx, x, y - 1, SHADOW_RX);
+      drawCharacter(ctx, {
+        sprite: dir.sprite,
+        flip: dir.flip,
+        pose: anim.pose,
+        x,
+        y,
+        lift: anim.lift,
+        mode: view.mode,
+      });
+    };
+    const kittenOnFloor = kitten.state === "idle" || kitten.state === "walk";
+    const kittenDraw = () => {
+      if (kittenOnFloor && view.mode === "color")
+        drawShadow(ctx, Math.round(kitten.x), Math.round(kitten.y) - 1, 6, 2);
+      drawCharacter(ctx, { ...k, mode: view.mode });
+    };
+    // Orden por profundidad: lo que está más abajo en pantalla va delante.
+    if (kittenOnFloor && kitten.y < y) {
+      kittenDraw();
+      girl();
+    } else {
+      girl();
+      kittenDraw();
+    }
     if (anim.bubble) {
       // Arriba a la derecha de la cabeza, como en el panel "Detalle".
       const bx = clamp(origin.x + rig.width - 10, 1, STAGE_W - BUBBLE_W - 1);
@@ -254,7 +383,6 @@ export function createStage(): HTMLElement {
         p.bodyDrop && "cuerpo -1",
         p.leg !== "none" && `pie ${p.leg === "left" ? "izq." : "der."} +1`,
         p.tail && `cola ${p.tail > 0 ? "+" : ""}${p.tail}`,
-        p.kittenTail && `gatito ${p.kittenTail > 0 ? "+" : ""}${p.kittenTail}`,
         p.eyes !== "open" &&
           `ojos ${p.eyes === "closed" ? "cerrados" : "felices"}`,
         anim.lift && `salto ${anim.lift}`,
@@ -303,6 +431,9 @@ export function createStage(): HTMLElement {
     } else if (key === " " || key === "Enter") {
       e.preventDefault();
       pet();
+    } else if (key === "g") {
+      e.preventDefault();
+      toggleKitten();
     }
   });
   wrap.addEventListener("keyup", (e) => sim.keys.delete(keyOf(e)));
@@ -362,6 +493,10 @@ export function createStage(): HTMLElement {
     ["Acariciar"],
   );
   petBtn.addEventListener("click", pet);
+  const kittenBtn = h("button", { type: "button", className: "ng-btn" }, [
+    "Gatito: bajar (G)",
+  ]);
+  kittenBtn.addEventListener("click", toggleKitten);
 
   // Cruceta: mantener pulsado para caminar.
   const padButtons = PAD.map((b) => {
@@ -421,7 +556,7 @@ export function createStage(): HTMLElement {
           h(
             "div",
             { className: "ng-buttons", role: "group", "aria-label": "Tiempo" },
-            [pauseBtn, stepBtn, slowBtn, petBtn],
+            [pauseBtn, stepBtn, slowBtn, petBtn, kittenBtn],
           ),
         ]),
         h("div", {}, [
