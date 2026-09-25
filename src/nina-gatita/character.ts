@@ -332,7 +332,12 @@ export function tailFromBack(
 // de sus vecinas es un pelo suelto o un resto del gatito. Se baja quitando
 // su píxel de arriba, hasta que no quede ninguno. Las orejas no se tocan:
 // tienen rosa en sus 4 primeras filas.
-export function smoothCrown(rows: readonly string[], limitY = 20): string[] {
+export function smoothCrown(
+  rows: readonly string[],
+  limitY = 20,
+  // Columnas que no se tocan (orejas ya dibujadas).
+  protect: readonly [number, number][] = [],
+): string[] {
   const g: Grid = rows.map((r) => [...r]);
   const w = g[0].length;
   const topOf = (x: number) => {
@@ -341,6 +346,7 @@ export function smoothCrown(rows: readonly string[], limitY = 20): string[] {
     return t < 0 ? g.length : t;
   };
   const isEar = (x: number) => {
+    if (protect.some(([a, b]) => x >= a && x <= b)) return true;
     const t = topOf(x);
     for (let y = t; y < t + 4 && y < g.length; y++)
       if (g[y][x] === "p" || g[y][x] === "P") return true;
@@ -482,6 +488,13 @@ export function sharpenEars(
     for (let y = Math.max(0, apexY - 4); y < baseY - 1; y++)
       for (let x = Math.floor(cx - width); x <= Math.ceil(cx + width); x++)
         if (x >= 0 && x < w) g[y][x] = EMPTY;
+  // El rosa de la hoja que quedaba por debajo de la base (hundido en el
+  // pelo) se leía como una mancha: pasa a pelo.
+  for (const { e, baseY } of shapes)
+    for (let y = baseY; y <= e.y1 + 1; y++)
+      for (let x = e.x0 - 1; x <= e.x1 + 1; x++)
+        if (x >= 0 && x < w && "pPSRir".includes(g[y]?.[x] ?? EMPTY))
+          g[y][x] = y === baseY + 1 ? "D" : "B";
   // Las lejanas (de espalda) primero, para que la cercana quede delante.
   const order = [...shapes].sort(
     (p, q) => Number(!!q.e.back) - Number(!!p.e.back),
@@ -489,7 +502,7 @@ export function sharpenEars(
   for (const { e, width, cx, out, baseY, apexY } of order) {
     for (let y = apexY; y <= baseY; y++) {
       const f = (y - apexY) / (baseY - apexY);
-      const shift = out * Math.round(2 * (1 - f));
+      const shift = out * Math.round(1 - f);
       // La punta es 1 px; debajo ya se abre a 3 (sin palito de 2 filas).
       const half = y === apexY ? 0 : Math.max(1, (f * (width - 1)) / 2);
       const left = Math.round(cx - half) + shift;
@@ -497,7 +510,7 @@ export function sharpenEars(
       for (let x = left; x <= right; x++) {
         if (x < 0 || x >= w) continue;
         const edge = x === left || x === right || y === apexY;
-        const innerCol = x > left + 1 && x < right - 1 && y >= apexY + 1;
+        const innerCol = x > left + 1 && x < right - 1 && y >= apexY + 2;
         g[y][x] = edge
           ? "k"
           : innerCol && !e.back
